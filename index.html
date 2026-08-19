@@ -1198,8 +1198,8 @@ function buildDefaultRows(){
   for (let i=0;i<5;i++) addRow('tbl-credits');
   for (let i=0;i<12;i++) addRow('tbl-charges-fixes');
   for (let i=0;i<5;i++) addRow('tbl-charges-var');
-  CATEGORIES.forEach(c => addRow('tbl-enveloppes', c));
-  CATEGORIES.forEach(c => addRow('tbl-depenses-semaine', c));
+  for (let i=0;i<CATEGORIES.length;i++) addRow('tbl-enveloppes');
+  for (let i=0;i<CATEGORIES.length;i++) addRow('tbl-depenses-semaine');
   for (let i=0;i<7;i++) addRow('tbl-economies-semaine');
   for (let i=0;i<9;i++) addRow('tbl-epargne-ct');
   for (let i=0;i<8;i++) addRow('tbl-epargne-lt');
@@ -1288,11 +1288,15 @@ function updateMonthIndicator(){
   document.getElementById('firstMonthBtn').disabled = atFirst;
 }
 
-/* tables where the user types free-text line-item descriptions (not fixed categories).
+/* tables where the user types free-text line-item descriptions (not fixed, hardcoded categories).
    Their descriptions are kept as a shared template (independent of month/year) so any
-   brand-new month — this year, next year, whichever one is opened first — starts pre-filled
-   with the same recurring items (Loyer, Salaire, EDF...); only the amounts reset to blank. */
-const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
+   month — this year, next year, whichever one is opened, freshly reset or not — always has
+   its recurring items (Loyer, Salaire, EDF, Courses...) filled in; only amounts stay blank.
+   applyDescriptions() only ever fills BLANK description cells, never overwrites something
+   already typed, so it is safe to call unconditionally, every time a month is displayed. */
+const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var',
+  'tbl-enveloppes','tbl-depenses-semaine','tbl-economies-semaine','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
+const DEFAULT_DESCRIPTIONS = { 'tbl-enveloppes': CATEGORIES, 'tbl-depenses-semaine': CATEGORIES };
 
 function snapshotDescriptions(){
   const out = {};
@@ -1315,13 +1319,13 @@ function loadDescTemplate(){
 
 function applyDescriptions(snapshot){
   DESC_CARRY_TABLES.forEach(id=>{
-    const list = snapshot[id] || [];
+    const list = (snapshot[id] && snapshot[id].length) ? snapshot[id] : (DEFAULT_DESCRIPTIONS[id] || []);
     if (!list.length) return;
     const tbody = document.getElementById(id).tBodies[0];
     while (tbody.rows.length < list.length) addRow(id);
     list.forEach((desc, i)=>{
       const el = tbody.rows[i] && tbody.rows[i].querySelector('.desc-in');
-      if (el) el.value = desc;
+      if (el && !el.value.trim()) el.value = desc; // never overwrite something already typed
     });
   });
 }
@@ -1329,13 +1333,12 @@ function applyDescriptions(snapshot){
 function goToMonth(newKey){
   if (newKey === currentMonth) return;
   saveState();
-  let hadData;
-  try { hadData = !!localStorage.getItem(DATA_PREFIX+newKey); } catch(e){ hadData = false; }
   currentMonth = newKey;
   saveMeta();
   resetFormBlank();
   loadState();
-  if (!hadData){ applyDescriptions(loadDescTemplate()); saveState(); }
+  applyDescriptions(loadDescTemplate());
+  saveState();
   recalcAll();
   updateMonthIndicator();
   window.scrollTo({top:0, behavior:'smooth'});
@@ -1831,6 +1834,8 @@ trySeedFromEmbeddedData();
 loadMeta();
 buildDefaultRows();
 loadState();
+applyDescriptions(loadDescTemplate());
+saveState();
 recalcAll();
 populateMonthYearSelects();
 updateMonthIndicator();
