@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Budget Ségala</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0b3d59">
 <style>
 :root{
   --navy:#0b3d59;
@@ -1831,6 +1834,14 @@ loadState();
 recalcAll();
 populateMonthYearSelects();
 updateMonthIndicator();
+
+/* offline support (PWA): only meaningful on the hosted https version — silently
+   does nothing when this file is opened locally (file://) */
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 
 })();
 </script>
