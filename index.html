@@ -485,7 +485,7 @@ footer{
     <div class="table-scroll">
       <table class="budget-table" id="tbl-epargne-ct">
         <thead><tr>
-          <th>Description</th><th>Objectif</th><th>Déjà épargné<br>(début de mois)</th>
+          <th>Description</th><th>Objectif</th><th>Déjà épargné</th>
           <th>Dépôt<br>ce mois</th><th>Retrait<br>ce mois</th><th>Montant total</th>
           <th>Progression</th><th>✓</th><th></th>
         </tr></thead>
@@ -1114,7 +1114,7 @@ function buildRowCells(cfg, prefillDesc){
   if (cfg.montant) html += `<td><input type="number" step="0.01" class="num montant-in"></td>`;
   if (cfg.objectif) html += `<td><input type="number" step="0.01" class="num objectif-in"></td>`;
   if (cfg.envelopeBalance) html += `
-    <td class="start-balance-cell num" data-value="0">0,00 €</td>
+    <td><input type="number" step="0.01" class="num start-balance-in"></td>
     <td><input type="number" step="0.01" class="num depot-in"></td>
     <td><input type="number" step="0.01" class="num retrait-in"></td>
     <td class="end-balance-cell num" data-value="0">0,00 €</td>
@@ -1152,7 +1152,7 @@ function recalcTable(tableId){
     const reelIn   = tr.querySelector('.reel-in');
     const montantIn= tr.querySelector('.montant-in');
     const objectifIn = tr.querySelector('.objectif-in');
-    const startCell = tr.querySelector('.start-balance-cell');
+    const startIn  = tr.querySelector('.start-balance-in');
     const depotIn  = tr.querySelector('.depot-in');
     const retraitIn= tr.querySelector('.retrait-in');
     const endCell  = tr.querySelector('.end-balance-cell');
@@ -1170,8 +1170,8 @@ function recalcTable(tableId){
     if (montantIn) tMontant += num(montantIn.value);
 
     let gaugeAmount = null;
-    if (startCell && depotIn && retraitIn && endCell){
-      const start = num(startCell.dataset.value);
+    if (startIn && depotIn && retraitIn && endCell){
+      const start = num(startIn.value);
       const depot = num(depotIn.value);
       const retrait = num(retraitIn.value);
       const end = start + depot - retrait;
@@ -1440,14 +1440,14 @@ function applyEnvelopeCarryForward(){
   const tbody = document.getElementById(tableId).tBodies[0];
   [...tbody.rows].forEach(tr=>{
     const descIn = tr.querySelector('.desc-in');
-    const startCell = tr.querySelector('.start-balance-cell');
+    const startIn = tr.querySelector('.start-balance-in');
     const objectifIn = tr.querySelector('.objectif-in');
     if (!descIn) return;
     const prev = prevByDesc[descIn.value.trim()];
 
-    if (startCell && startCell.dataset.resolved !== '1'){
-      setMoneyCell(startCell, prev ? prev.end : 0);
-      startCell.dataset.resolved = '1';
+    // never overwrite a value she already typed herself — only pre-fill a genuinely blank field
+    if (startIn && !startIn.value.trim() && prev){
+      startIn.value = prev.end.toFixed(2);
     }
     if (objectifIn && !objectifIn.value.trim() && prev && prev.objectif){
       objectifIn.value = prev.objectif;
@@ -1602,7 +1602,7 @@ function pdfRowValue(tr, key){
   if (key === 'rowtotal'){ const el = tr.querySelector('.rowtotal-cell'); return el ? el.textContent.trim() : ''; }
   if (key === 'montant'){ const el = tr.querySelector('.montant-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'objectif'){ const el = tr.querySelector('.objectif-in'); return el ? euro(num(el.value)) : ''; }
-  if (key === 'startBalance'){ const el = tr.querySelector('.start-balance-cell'); return el ? el.textContent.trim() : ''; }
+  if (key === 'startBalance'){ const el = tr.querySelector('.start-balance-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'depot'){ const el = tr.querySelector('.depot-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'retrait'){ const el = tr.querySelector('.retrait-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'endBalance'){ const el = tr.querySelector('.end-balance-cell'); return el ? el.textContent.trim() : ''; }
@@ -1819,11 +1819,10 @@ function trySeedFromEmbeddedData(){
 /* ---------- save / load ---------- */
 function collectRow(tr){
   const g = sel => { const el = tr.querySelector(sel); return el ? el.value : undefined; };
-  const startCell = tr.querySelector('.start-balance-cell');
   return {
     desc: g('.desc-in'), date: g('.date-in'), budget: g('.budget-in'), reel: g('.reel-in'),
     montant: g('.montant-in'), objectif: g('.objectif-in'),
-    startBalance: startCell ? startCell.dataset.value : undefined,
+    startBalance: g('.start-balance-in'),
     depot: g('.depot-in'), retrait: g('.retrait-in'),
     epargnes: g('.epargnes-in'), defis: g('.defis-in'),
     weeks: [...tr.querySelectorAll('.week-in')].map(i=>i.value),
@@ -1835,9 +1834,8 @@ function restoreRow(tr, rd){
   const set = (sel, v) => { const el = tr.querySelector(sel); if (el && v!==undefined) el.value = v; };
   set('.desc-in', rd.desc); set('.date-in', rd.date); set('.budget-in', rd.budget); set('.reel-in', rd.reel);
   set('.montant-in', rd.montant); set('.objectif-in', rd.objectif); set('.depot-in', rd.depot); set('.retrait-in', rd.retrait);
+  set('.start-balance-in', rd.startBalance);
   set('.epargnes-in', rd.epargnes); set('.defis-in', rd.defis);
-  const startCell = tr.querySelector('.start-balance-cell');
-  if (startCell && rd.startBalance !== undefined){ setMoneyCell(startCell, num(rd.startBalance)); startCell.dataset.resolved = '1'; }
   const weekEls = tr.querySelectorAll('.week-in');
   (rd.weeks||[]).forEach((v,i)=>{ if (weekEls[i] && v!==undefined && v!=='') weekEls[i].value = v; });
   const chk = tr.querySelector('.check-in');
