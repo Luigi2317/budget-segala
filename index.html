@@ -481,36 +481,39 @@ footer{
 <section class="page" id="p5">
   <div class="card">
     <h2><span class="num-badge">5</span> Épargnes et Défis</h2>
-    <div class="livret-grid">
-      <div>
-        <h3 style="color:var(--navy);">Épargnes court terme</h3>
-        <div class="table-scroll">
-          <table class="budget-table" id="tbl-epargne-ct">
-            <thead><tr><th>Description</th><th>Montant</th><th>Objectif</th><th>Progression</th><th>✓</th><th></th></tr></thead>
-            <tbody></tbody>
-            <tfoot><tr><td>Total</td>
-              <td id="tbl-epargne-ct-tot-montant" class="num" data-value="0">0,00 €</td>
-              <td id="tbl-epargne-ct-tot-objectif" class="num" data-value="0">0,00 €</td>
-              <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" id="tbl-epargne-ct-tot-progress-fill" style="width:0%;"></div></div><span class="mini-gauge-pct" id="tbl-epargne-ct-tot-progress-pct">0%</span></td>
-              <td>—</td><td></td></tr></tfoot>
-          </table>
-        </div>
-        <button type="button" class="add-row-btn" data-table="tbl-epargne-ct">+ Ajouter</button>
-      </div>
-      <div>
-        <h3 style="color:var(--navy);">Épargnes long terme</h3>
-        <div class="table-scroll">
-          <table class="budget-table" id="tbl-epargne-lt">
-            <thead><tr><th>Description</th><th>Montant</th><th>✓</th><th></th></tr></thead>
-            <tbody></tbody>
-            <tfoot><tr><td>Total</td>
-              <td id="tbl-epargne-lt-tot-montant" class="num" data-value="0">0,00 €</td>
-              <td>—</td><td></td></tr></tfoot>
-          </table>
-        </div>
-        <button type="button" class="add-row-btn" data-table="tbl-epargne-lt">+ Ajouter</button>
-      </div>
+    <h3 style="color:var(--navy);">Épargnes court terme</h3>
+    <div class="table-scroll">
+      <table class="budget-table" id="tbl-epargne-ct">
+        <thead><tr>
+          <th>Description</th><th>Objectif</th><th>Déjà épargné<br>(début de mois)</th>
+          <th>Dépôt<br>ce mois</th><th>Retrait<br>ce mois</th><th>Montant total</th>
+          <th>Progression</th><th>✓</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><td>Total</td>
+          <td id="tbl-epargne-ct-tot-objectif" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-ct-tot-start" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-ct-tot-depot" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-ct-tot-retrait" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-ct-tot-end" class="num" data-value="0">0,00 €</td>
+          <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" id="tbl-epargne-ct-tot-progress-fill" style="width:0%;"></div></div><span class="mini-gauge-pct" id="tbl-epargne-ct-tot-progress-pct">0%</span></td>
+          <td>—</td><td></td></tr></tfoot>
+      </table>
     </div>
+    <button type="button" class="add-row-btn" data-table="tbl-epargne-ct">+ Ajouter</button>
+    <span id="tbl-epargne-ct-tot-netmovement" data-value="0" style="display:none;"></span>
+
+    <h3 style="color:var(--navy); margin-top:24px;">Épargnes long terme</h3>
+    <div class="table-scroll">
+      <table class="budget-table" id="tbl-epargne-lt">
+        <thead><tr><th>Description</th><th>Montant</th><th>✓</th><th></th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><td>Total</td>
+          <td id="tbl-epargne-lt-tot-montant" class="num" data-value="0">0,00 €</td>
+          <td>—</td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <button type="button" class="add-row-btn" data-table="tbl-epargne-lt">+ Ajouter</button>
 
     <h3 style="color:var(--navy); margin-top:20px;">Défis</h3>
     <div class="table-scroll">
@@ -589,7 +592,7 @@ footer{
         <h3>Court Terme</h3>
         <div class="livret-row"><label>Solde début</label><input type="number" step="0.01" id="livretCT-debut" class="standalone"></div>
         <div class="livret-row"><label>+ Épargnes</label><input type="number" step="0.01" id="livretCT-epargne" class="standalone">
-          <button type="button" class="mini-btn" data-fill="livretCT-epargne" data-source="tbl-epargne-ct-tot-montant">↻ total</button></div>
+          <button type="button" class="mini-btn" data-fill="livretCT-epargne" data-source="tbl-epargne-ct-tot-netmovement">↻ total</button></div>
         <div class="livret-row"><label>− Dépenses</label><input type="number" step="0.01" id="livretCT-depense" class="standalone"></div>
         <div class="livret-row"><label>= Solde fin</label><span class="fin-box" id="livretCT-fin" data-value="0">0,00 €</span></div>
       </div>
@@ -1094,7 +1097,7 @@ const ADDABLE_TABLES = {
   'tbl-enveloppes':       { desc:true, budget:true, weeks:true, removable:true },
   'tbl-depenses-semaine': { desc:true, weeks:true, rowTotal:true, removable:true },
   'tbl-economies-semaine':{ desc:true, weeks:true, rowTotal:true, removable:true },
-  'tbl-epargne-ct':       { desc:true, montant:true, objectif:true, check:true, removable:true },
+  'tbl-epargne-ct':       { desc:true, objectif:true, envelopeBalance:true, check:true, removable:true },
   'tbl-epargne-lt':       { desc:true, montant:true, check:true, removable:true },
   'tbl-defis':            { desc:true, montant:true, check:true, removable:true }
 };
@@ -1109,7 +1112,12 @@ function buildRowCells(cfg, prefillDesc){
   if (cfg.weeks)  { for(let w=1; w<=5; w++) html += `<td><input type="number" step="0.01" class="num week-in"></td>`; }
   if (cfg.rowTotal) html += `<td class="rowtotal-cell num" data-value="0">0,00 €</td>`;
   if (cfg.montant) html += `<td><input type="number" step="0.01" class="num montant-in"></td>`;
-  if (cfg.objectif) html += `<td><input type="number" step="0.01" class="num objectif-in"></td>
+  if (cfg.objectif) html += `<td><input type="number" step="0.01" class="num objectif-in"></td>`;
+  if (cfg.envelopeBalance) html += `
+    <td class="start-balance-cell num" data-value="0">0,00 €</td>
+    <td><input type="number" step="0.01" class="num depot-in"></td>
+    <td><input type="number" step="0.01" class="num retrait-in"></td>
+    <td class="end-balance-cell num" data-value="0">0,00 €</td>
     <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" style="width:0%;"></div></div><span class="mini-gauge-pct">0%</span></td>`;
   if (cfg.check)  html += `<td class="check-cell"><input type="checkbox" class="check-in"></td>`;
   if (cfg.removable) html += `<td class="rm-cell"><button type="button" class="rm-btn" title="Supprimer">✕</button></td>`;
@@ -1136,6 +1144,7 @@ function recalcTable(tableId){
   if (!table) return;
   const tbody = table.tBodies[0];
   let tBudget=0, tReel=0, tMontant=0, tObjectif=0, tEpargnes=0, tDefis=0, tRowTotal=0;
+  let tStart=0, tDepot=0, tRetrait=0, tEnd=0;
   const tS=[0,0,0,0,0];
 
   [...tbody.rows].forEach(tr=>{
@@ -1143,6 +1152,10 @@ function recalcTable(tableId){
     const reelIn   = tr.querySelector('.reel-in');
     const montantIn= tr.querySelector('.montant-in');
     const objectifIn = tr.querySelector('.objectif-in');
+    const startCell = tr.querySelector('.start-balance-cell');
+    const depotIn  = tr.querySelector('.depot-in');
+    const retraitIn= tr.querySelector('.retrait-in');
+    const endCell  = tr.querySelector('.end-balance-cell');
     const epargnesIn = tr.querySelector('.epargnes-in');
     const defisIn  = tr.querySelector('.defis-in');
     const weekIns  = tr.querySelectorAll('.week-in');
@@ -1154,13 +1167,24 @@ function recalcTable(tableId){
     if (reelIn){ r = num(reelIn.value); tReel += r; }
     if (diffCell && budgetIn && reelIn) setDiffCell(diffCell, r-b);
 
-    let m = 0;
-    if (montantIn){ m = num(montantIn.value); tMontant += m; }
+    if (montantIn) tMontant += num(montantIn.value);
+
+    let gaugeAmount = null;
+    if (startCell && depotIn && retraitIn && endCell){
+      const start = num(startCell.dataset.value);
+      const depot = num(depotIn.value);
+      const retrait = num(retraitIn.value);
+      const end = start + depot - retrait;
+      setMoneyCell(endCell, end);
+      tStart += start; tDepot += depot; tRetrait += retrait; tEnd += end;
+      gaugeAmount = end;
+    }
 
     if (objectifIn){
       const o = num(objectifIn.value);
       tObjectif += o;
-      const pct = o > 0 ? Math.max(0, Math.min(100, (m/o)*100)) : 0;
+      const amount = gaugeAmount !== null ? gaugeAmount : num(montantIn ? montantIn.value : 0);
+      const pct = o > 0 ? Math.max(0, Math.min(100, (amount/o)*100)) : 0;
       const fillEl = tr.querySelector('.mini-gauge-fill');
       const pctEl = tr.querySelector('.mini-gauge-pct');
       if (fillEl) fillEl.style.width = pct + '%';
@@ -1181,6 +1205,11 @@ function recalcTable(tableId){
   setDiffCell(document.getElementById(`${tableId}-tot-diff`), tReel-tBudget);
   setMoneyCell(document.getElementById(`${tableId}-tot-montant`), tMontant);
   setMoneyCell(document.getElementById(`${tableId}-tot-objectif`), tObjectif);
+  setMoneyCell(document.getElementById(`${tableId}-tot-start`), tStart);
+  setMoneyCell(document.getElementById(`${tableId}-tot-depot`), tDepot);
+  setMoneyCell(document.getElementById(`${tableId}-tot-retrait`), tRetrait);
+  setMoneyCell(document.getElementById(`${tableId}-tot-end`), tEnd);
+  setMoneyCell(document.getElementById(`${tableId}-tot-netmovement`), tDepot - tRetrait);
   setMoneyCell(document.getElementById(`${tableId}-tot-epargnes`), tEpargnes);
   setMoneyCell(document.getElementById(`${tableId}-tot-defis`), tDefis);
   setMoneyCell(document.getElementById(`${tableId}-tot-rowtotal`), tRowTotal);
@@ -1188,7 +1217,8 @@ function recalcTable(tableId){
 
   const totFillEl = document.getElementById(`${tableId}-tot-progress-fill`);
   if (totFillEl){
-    const totPct = tObjectif > 0 ? Math.max(0, Math.min(100, (tMontant/tObjectif)*100)) : 0;
+    const totAmount = (ADDABLE_TABLES[tableId] && ADDABLE_TABLES[tableId].envelopeBalance) ? tEnd : tMontant;
+    const totPct = tObjectif > 0 ? Math.max(0, Math.min(100, (totAmount/tObjectif)*100)) : 0;
     totFillEl.style.width = totPct + '%';
     const totPctEl = document.getElementById(`${tableId}-tot-progress-pct`);
     if (totPctEl) totPctEl.textContent = Math.round(totPct) + '%';
@@ -1383,6 +1413,48 @@ function applyDescriptions(snapshot){
   });
 }
 
+/* Épargnes court terme (tbl-epargne-ct) carries a running balance across months, matched by
+   description: this month's "déjà épargné" (start of month) = previous month's ending balance
+   (start + dépôt − retrait). Objectif carries over the same way. Only fills rows whose start
+   balance hasn't already been resolved for this month (set by restoreRow when real saved data
+   exists), so it never overwrites genuine data — safe to call unconditionally on every load. */
+function applyEnvelopeCarryForward(){
+  const tableId = 'tbl-epargne-ct';
+  let prevKey;
+  try { prevKey = addMonthsToKey(currentMonth, -1); } catch(e){ return; }
+  let raw;
+  try { raw = localStorage.getItem(DATA_PREFIX+prevKey); } catch(e){ raw = null; }
+  let prevRows = [];
+  if (raw){
+    try { const data = JSON.parse(raw); prevRows = (data.tables && data.tables[tableId]) || []; } catch(e){}
+  }
+  const prevByDesc = {};
+  prevRows.forEach(rd=>{
+    if (!rd || !rd.desc || !rd.desc.trim()) return;
+    prevByDesc[rd.desc.trim()] = {
+      end: num(rd.startBalance) + num(rd.depot) - num(rd.retrait),
+      objectif: rd.objectif
+    };
+  });
+
+  const tbody = document.getElementById(tableId).tBodies[0];
+  [...tbody.rows].forEach(tr=>{
+    const descIn = tr.querySelector('.desc-in');
+    const startCell = tr.querySelector('.start-balance-cell');
+    const objectifIn = tr.querySelector('.objectif-in');
+    if (!descIn) return;
+    const prev = prevByDesc[descIn.value.trim()];
+
+    if (startCell && startCell.dataset.resolved !== '1'){
+      setMoneyCell(startCell, prev ? prev.end : 0);
+      startCell.dataset.resolved = '1';
+    }
+    if (objectifIn && !objectifIn.value.trim() && prev && prev.objectif){
+      objectifIn.value = prev.objectif;
+    }
+  });
+}
+
 function goToMonth(newKey){
   if (newKey === currentMonth) return;
   saveState();
@@ -1391,6 +1463,7 @@ function goToMonth(newKey){
   resetFormBlank();
   loadState();
   applyDescriptions(loadDescTemplate());
+  applyEnvelopeCarryForward();
   saveState();
   recalcAll();
   updateMonthIndicator();
@@ -1508,7 +1581,14 @@ function pdfColumnsForTable(tableId){
   if (cfg.weeks){ for (let w=1; w<=5; w++){ headers.push('S'+w); keys.push('s'+w); } }
   if (cfg.rowTotal){ headers.push('Total'); keys.push('rowtotal'); }
   if (cfg.montant){ headers.push('Montant'); keys.push('montant'); }
-  if (cfg.objectif){ headers.push('Objectif'); keys.push('objectif'); headers.push('Progression'); keys.push('progression'); }
+  if (cfg.objectif){ headers.push('Objectif'); keys.push('objectif'); }
+  if (cfg.envelopeBalance){
+    headers.push('Déjà épargné'); keys.push('startBalance');
+    headers.push('Dépôt'); keys.push('depot');
+    headers.push('Retrait'); keys.push('retrait');
+    headers.push('Montant total'); keys.push('endBalance');
+    headers.push('Progression'); keys.push('progression');
+  }
   if (cfg.check){ headers.push('✓'); keys.push('check'); }
   return { headers, keys };
 }
@@ -1522,6 +1602,10 @@ function pdfRowValue(tr, key){
   if (key === 'rowtotal'){ const el = tr.querySelector('.rowtotal-cell'); return el ? el.textContent.trim() : ''; }
   if (key === 'montant'){ const el = tr.querySelector('.montant-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'objectif'){ const el = tr.querySelector('.objectif-in'); return el ? euro(num(el.value)) : ''; }
+  if (key === 'startBalance'){ const el = tr.querySelector('.start-balance-cell'); return el ? el.textContent.trim() : ''; }
+  if (key === 'depot'){ const el = tr.querySelector('.depot-in'); return el ? euro(num(el.value)) : ''; }
+  if (key === 'retrait'){ const el = tr.querySelector('.retrait-in'); return el ? euro(num(el.value)) : ''; }
+  if (key === 'endBalance'){ const el = tr.querySelector('.end-balance-cell'); return el ? el.textContent.trim() : ''; }
   if (key === 'progression'){ const el = tr.querySelector('.mini-gauge-pct'); return el ? el.textContent.trim() : ''; }
   if (key === 'epargnes'){ const el = tr.querySelector('.epargnes-in'); return el ? euro(num(el.value)) : ''; }
   if (key === 'defis'){ const el = tr.querySelector('.defis-in'); return el ? euro(num(el.value)) : ''; }
@@ -1735,9 +1819,12 @@ function trySeedFromEmbeddedData(){
 /* ---------- save / load ---------- */
 function collectRow(tr){
   const g = sel => { const el = tr.querySelector(sel); return el ? el.value : undefined; };
+  const startCell = tr.querySelector('.start-balance-cell');
   return {
     desc: g('.desc-in'), date: g('.date-in'), budget: g('.budget-in'), reel: g('.reel-in'),
     montant: g('.montant-in'), objectif: g('.objectif-in'),
+    startBalance: startCell ? startCell.dataset.value : undefined,
+    depot: g('.depot-in'), retrait: g('.retrait-in'),
     epargnes: g('.epargnes-in'), defis: g('.defis-in'),
     weeks: [...tr.querySelectorAll('.week-in')].map(i=>i.value),
     check: (()=>{ const el = tr.querySelector('.check-in'); return el ? el.checked : undefined; })()
@@ -1747,7 +1834,10 @@ function restoreRow(tr, rd){
   if (!rd) return;
   const set = (sel, v) => { const el = tr.querySelector(sel); if (el && v!==undefined) el.value = v; };
   set('.desc-in', rd.desc); set('.date-in', rd.date); set('.budget-in', rd.budget); set('.reel-in', rd.reel);
-  set('.montant-in', rd.montant); set('.objectif-in', rd.objectif); set('.epargnes-in', rd.epargnes); set('.defis-in', rd.defis);
+  set('.montant-in', rd.montant); set('.objectif-in', rd.objectif); set('.depot-in', rd.depot); set('.retrait-in', rd.retrait);
+  set('.epargnes-in', rd.epargnes); set('.defis-in', rd.defis);
+  const startCell = tr.querySelector('.start-balance-cell');
+  if (startCell && rd.startBalance !== undefined){ setMoneyCell(startCell, num(rd.startBalance)); startCell.dataset.resolved = '1'; }
   const weekEls = tr.querySelectorAll('.week-in');
   (rd.weeks||[]).forEach((v,i)=>{ if (weekEls[i] && v!==undefined && v!=='') weekEls[i].value = v; });
   const chk = tr.querySelector('.check-in');
@@ -1896,6 +1986,7 @@ loadMeta();
 buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
+applyEnvelopeCarryForward();
 saveState();
 recalcAll();
 populateMonthYearSelects();
