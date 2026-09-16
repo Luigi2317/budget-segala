@@ -1454,17 +1454,34 @@ function applyDescriptions(snapshot){
       rows = defaults.map(d => ({ desc: d }));
     }
     const tbody = document.getElementById(id).tBodies[0];
+
+    // pass 1: ensure enough rows exist, and fill blank descriptions by position — this only
+    // matters to establish the row set on a brand-new month (blank rows, in template order)
     while (tbody.rows.length < rows.length) addRow(id);
     rows.forEach((rowData, i)=>{
       const tr = tbody.rows[i];
       if (!tr) return;
       const descEl = tr.querySelector('.desc-in');
       if (descEl && !descEl.value.trim() && rowData.desc) descEl.value = rowData.desc; // never overwrite something already typed
-      extraFields.forEach(f=>{
-        const el = tr.querySelector(`.${f}-in`);
-        if (el && !el.value.trim() && rowData[f]) el.value = rowData[f];
-      });
     });
+
+    // pass 2: fill extra sticky fields (Budget/Objectif/Dépôt) by matching each row's *current*
+    // description text against the template — never by row position. Position-matching would
+    // silently put the wrong envelope's/item's figure on the wrong row whenever a row was ever
+    // added, removed, or reordered between the month that saved the template and this one.
+    if (extraFields.length){
+      const byDesc = {};
+      rows.forEach(rowData => { if (rowData.desc && rowData.desc.trim()) byDesc[rowData.desc.trim()] = rowData; });
+      [...tbody.rows].forEach(tr=>{
+        const descEl = tr.querySelector('.desc-in');
+        const match = descEl && byDesc[descEl.value.trim()];
+        if (!match) return;
+        extraFields.forEach(f=>{
+          const el = tr.querySelector(`.${f}-in`);
+          if (el && !el.value.trim() && match[f]) el.value = match[f];
+        });
+      });
+    }
   });
 }
 
