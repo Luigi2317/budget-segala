@@ -1489,7 +1489,8 @@ function applyEnvelopeCarryForward(){
     if (!rd || !rd.desc || !rd.desc.trim()) return;
     prevByDesc[rd.desc.trim()] = {
       end: num(rd.startBalance) + num(rd.depot) - num(rd.retrait),
-      objectif: rd.objectif
+      objectif: rd.objectif,
+      depot: rd.depot
     };
   });
 
@@ -1498,6 +1499,7 @@ function applyEnvelopeCarryForward(){
     const descIn = tr.querySelector('.desc-in');
     const startIn = tr.querySelector('.start-balance-in');
     const objectifIn = tr.querySelector('.objectif-in');
+    const depotIn = tr.querySelector('.depot-in');
     if (!descIn) return;
     const prev = prevByDesc[descIn.value.trim()];
 
@@ -1508,6 +1510,42 @@ function applyEnvelopeCarryForward(){
     if (objectifIn && !objectifIn.value.trim() && prev && prev.objectif){
       objectifIn.value = prev.objectif;
     }
+    if (depotIn && !depotIn.value.trim() && prev && prev.depot !== undefined && prev.depot !== ''){
+      depotIn.value = prev.depot;
+    }
+  });
+}
+
+/* Budget carries forward month-to-month for Revenus / Charges Fixes (matched by description,
+   only fills a genuinely blank cell) — the planned amount rarely changes, only "Réel" (the
+   actual observed amount) is meant to be re-entered fresh every month. */
+const BUDGET_CARRY_TABLES = ['tbl-revenus', 'tbl-charges-fixes'];
+
+function applyBudgetCarryForward(){
+  let prevKey;
+  try { prevKey = addMonthsToKey(currentMonth, -1); } catch(e){ return; }
+  let raw;
+  try { raw = localStorage.getItem(DATA_PREFIX+prevKey); } catch(e){ raw = null; }
+  let prevData = null;
+  if (raw){ try { prevData = JSON.parse(raw); } catch(e){} }
+
+  BUDGET_CARRY_TABLES.forEach(tableId=>{
+    const prevRows = (prevData && prevData.tables && prevData.tables[tableId]) || [];
+    const prevByDesc = {};
+    prevRows.forEach(rd=>{
+      if (rd && rd.desc && rd.desc.trim() && rd.budget !== undefined && rd.budget !== ''){
+        prevByDesc[rd.desc.trim()] = rd.budget;
+      }
+    });
+
+    const tbody = document.getElementById(tableId).tBodies[0];
+    [...tbody.rows].forEach(tr=>{
+      const descIn = tr.querySelector('.desc-in');
+      const budgetIn = tr.querySelector('.budget-in');
+      if (!descIn || !budgetIn || budgetIn.value.trim()) return;
+      const prevBudget = prevByDesc[descIn.value.trim()];
+      if (prevBudget !== undefined) budgetIn.value = prevBudget;
+    });
   });
 }
 
@@ -1520,6 +1558,7 @@ function goToMonth(newKey){
   loadState();
   applyDescriptions(loadDescTemplate());
   applyEnvelopeCarryForward();
+  applyBudgetCarryForward();
   saveState();
   recalcAll();
   updateMonthIndicator();
@@ -2048,6 +2087,7 @@ buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
 applyEnvelopeCarryForward();
+applyBudgetCarryForward();
 saveState();
 recalcAll();
 populateMonthYearSelects();
