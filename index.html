@@ -1403,22 +1403,35 @@ function updateMonthIndicator(){
 }
 
 /* tables where the user types free-text line-item descriptions (not fixed, hardcoded categories).
-   Their descriptions are kept as a shared template (independent of month/year) so any
-   month — this year, next year, whichever one is opened, freshly reset or not — always has
-   its recurring items (Loyer, Salaire, EDF, Courses...) filled in; only amounts stay blank.
-   applyDescriptions() only ever fills BLANK description cells, never overwrites something
-   already typed, so it is safe to call unconditionally, every time a month is displayed. */
+   Their descriptions — and a few other "sticky" fields (Budget, Objectif, Dépôt) that rarely
+   change month to month — are kept as a shared template (independent of month/year, tracks the
+   most recently saved values regardless of navigation order) so any month — this year, next
+   year, jumped-to out of order or not — always starts pre-filled; only genuinely fresh-each-month
+   amounts (Réel, Retrait...) stay blank. applyDescriptions() only ever fills BLANK cells, never
+   overwrites something already typed, so it is safe to call unconditionally, every time a month
+   is displayed. STICKY_EXTRA_FIELDS lists, per table, which extra input classes (besides
+   ".desc-in") ride along with the description in the template. */
 const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var',
   'tbl-enveloppes','tbl-depenses-semaine','tbl-economies-semaine','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
 const DEFAULT_DESCRIPTIONS = { 'tbl-enveloppes': CATEGORIES, 'tbl-depenses-semaine': CATEGORIES };
+const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'] };
 
 function snapshotDescriptions(){
   const out = {};
   DESC_CARRY_TABLES.forEach(id=>{
     const tbody = document.getElementById(id).tBodies[0];
+    const extraFields = STICKY_EXTRA_FIELDS[id] || [];
     out[id] = [...tbody.rows]
-      .map(tr => { const el = tr.querySelector('.desc-in'); return el ? el.value : ''; })
-      .filter(v => v.trim() !== '');
+      .map(tr=>{
+        const descEl = tr.querySelector('.desc-in');
+        const row = { desc: descEl ? descEl.value : '' };
+        extraFields.forEach(f=>{
+          const el = tr.querySelector(`.${f}-in`);
+          row[f] = el ? el.value : '';
+        });
+        return row;
+      })
+      .filter(row => row.desc.trim() !== '');
   });
   return out;
 }
@@ -1433,22 +1446,28 @@ function loadDescTemplate(){
 
 function applyDescriptions(snapshot){
   DESC_CARRY_TABLES.forEach(id=>{
-    const list = (snapshot[id] && snapshot[id].length) ? snapshot[id] : (DEFAULT_DESCRIPTIONS[id] || []);
-    if (!list.length) return;
+    const extraFields = STICKY_EXTRA_FIELDS[id] || [];
+    let rows = (snapshot[id] && snapshot[id].length) ? snapshot[id] : null;
+    if (!rows){
+      const defaults = DEFAULT_DESCRIPTIONS[id];
+      if (!defaults || !defaults.length) return;
+      rows = defaults.map(d => ({ desc: d }));
+    }
     const tbody = document.getElementById(id).tBodies[0];
-    while (tbody.rows.length < list.length) addRow(id);
-    list.forEach((desc, i)=>{
-      const el = tbody.rows[i] && tbody.rows[i].querySelector('.desc-in');
-      if (el && !el.value.trim()) el.value = desc; // never overwrite something already typed
+    while (tbody.rows.length < rows.length) addRow(id);
+    rows.forEach((rowData, i)=>{
+      const tr = tbody.rows[i];
+      if (!tr) return;
+      const descEl = tr.querySelector('.desc-in');
+      if (descEl && !descEl.value.trim() && rowData.desc) descEl.value = rowData.desc; // never overwrite something already typed
+      extraFields.forEach(f=>{
+        const el = tr.querySelector(`.${f}-in`);
+        if (el && !el.value.trim() && rowData[f]) el.value = rowData[f];
+      });
     });
   });
 }
 
-/* Épargnes court terme (tbl-epargne-ct) carries a running balance across months, matched by
-   description: this month's "déjà épargné" (start of month) = previous month's ending balance
-   (start + dépôt − retrait). Objectif carries over the same way. Only fills rows whose start
-   balance hasn't already been resolved for this month (set by restoreRow when real saved data
-   exists), so it never overwrites genuine data — safe to call unconditionally on every load. */
 /* red/orange/green threshold indicator on "Déjà épargné" for Épargnes court terme.
    Global setting (not per-month) so it stays put regardless of which month is open. */
 let seuilCTBas = 3000, seuilCTHaut = 5000;
@@ -1474,6 +1493,11 @@ function updateSeuilLabels(){
   document.getElementById('seuilCTHautLabel').textContent = euro(seuilCTHaut);
 }
 
+/* Épargnes court terme (tbl-epargne-ct) also carries a running LEDGER balance across months —
+   unlike Objectif/Dépôt above (sticky constants, handled by applyDescriptions), "Déjà épargné"
+   genuinely chains from one month to the next (this month's start = last month's start+dépôt−retrait),
+   so it must look at the literal previous calendar month, not a floating template. Only fills the
+   field when it's still blank, so it never overwrites something she typed herself. */
 function applyEnvelopeCarryForward(){
   const tableId = 'tbl-epargne-ct';
   let prevKey;
@@ -1484,68 +1508,19 @@ function applyEnvelopeCarryForward(){
   if (raw){
     try { const data = JSON.parse(raw); prevRows = (data.tables && data.tables[tableId]) || []; } catch(e){}
   }
-  const prevByDesc = {};
+  const prevEndByDesc = {};
   prevRows.forEach(rd=>{
     if (!rd || !rd.desc || !rd.desc.trim()) return;
-    prevByDesc[rd.desc.trim()] = {
-      end: num(rd.startBalance) + num(rd.depot) - num(rd.retrait),
-      objectif: rd.objectif,
-      depot: rd.depot
-    };
+    prevEndByDesc[rd.desc.trim()] = num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
   });
 
   const tbody = document.getElementById(tableId).tBodies[0];
   [...tbody.rows].forEach(tr=>{
     const descIn = tr.querySelector('.desc-in');
     const startIn = tr.querySelector('.start-balance-in');
-    const objectifIn = tr.querySelector('.objectif-in');
-    const depotIn = tr.querySelector('.depot-in');
-    if (!descIn) return;
-    const prev = prevByDesc[descIn.value.trim()];
-
-    // never overwrite a value she already typed herself — only pre-fill a genuinely blank field
-    if (startIn && !startIn.value.trim() && prev){
-      startIn.value = prev.end.toFixed(2);
-    }
-    if (objectifIn && !objectifIn.value.trim() && prev && prev.objectif){
-      objectifIn.value = prev.objectif;
-    }
-    if (depotIn && !depotIn.value.trim() && prev && prev.depot !== undefined && prev.depot !== ''){
-      depotIn.value = prev.depot;
-    }
-  });
-}
-
-/* Budget carries forward month-to-month for Revenus / Charges Fixes (matched by description,
-   only fills a genuinely blank cell) — the planned amount rarely changes, only "Réel" (the
-   actual observed amount) is meant to be re-entered fresh every month. */
-const BUDGET_CARRY_TABLES = ['tbl-revenus', 'tbl-charges-fixes'];
-
-function applyBudgetCarryForward(){
-  let prevKey;
-  try { prevKey = addMonthsToKey(currentMonth, -1); } catch(e){ return; }
-  let raw;
-  try { raw = localStorage.getItem(DATA_PREFIX+prevKey); } catch(e){ raw = null; }
-  let prevData = null;
-  if (raw){ try { prevData = JSON.parse(raw); } catch(e){} }
-
-  BUDGET_CARRY_TABLES.forEach(tableId=>{
-    const prevRows = (prevData && prevData.tables && prevData.tables[tableId]) || [];
-    const prevByDesc = {};
-    prevRows.forEach(rd=>{
-      if (rd && rd.desc && rd.desc.trim() && rd.budget !== undefined && rd.budget !== ''){
-        prevByDesc[rd.desc.trim()] = rd.budget;
-      }
-    });
-
-    const tbody = document.getElementById(tableId).tBodies[0];
-    [...tbody.rows].forEach(tr=>{
-      const descIn = tr.querySelector('.desc-in');
-      const budgetIn = tr.querySelector('.budget-in');
-      if (!descIn || !budgetIn || budgetIn.value.trim()) return;
-      const prevBudget = prevByDesc[descIn.value.trim()];
-      if (prevBudget !== undefined) budgetIn.value = prevBudget;
-    });
+    if (!descIn || !startIn || startIn.value.trim()) return;
+    const end = prevEndByDesc[descIn.value.trim()];
+    if (end !== undefined) startIn.value = end.toFixed(2);
   });
 }
 
@@ -1558,7 +1533,6 @@ function goToMonth(newKey){
   loadState();
   applyDescriptions(loadDescTemplate());
   applyEnvelopeCarryForward();
-  applyBudgetCarryForward();
   saveState();
   recalcAll();
   updateMonthIndicator();
@@ -2087,7 +2061,6 @@ buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
 applyEnvelopeCarryForward();
-applyBudgetCarryForward();
 saveState();
 recalcAll();
 populateMonthYearSelects();
