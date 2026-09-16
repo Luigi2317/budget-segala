@@ -180,6 +180,21 @@ button.add-row-btn:hover{background:var(--navy);}
 }
 .mini-gauge-fill{height:100%; background:linear-gradient(90deg, var(--sea), var(--green)); transition:width .3s ease;}
 .mini-gauge-pct{font-size:.78em; color:var(--navy); margin-left:5px; vertical-align:middle;}
+.threshold-dot{
+  display:inline-block; width:13px; height:13px; border-radius:50%;
+  margin-left:6px; vertical-align:middle; border:1px solid rgba(0,0,0,.15);
+}
+.dot-red{background:var(--coral);}
+.dot-orange{background:#e0902b;}
+.dot-green{background:var(--green);}
+.threshold-legend{
+  display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin:8px 0 14px;
+  font-size:.88em; color:var(--navy); background:rgba(255,255,255,.55); border-radius:8px; padding:8px 12px;
+}
+.threshold-legend .legend-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+.threshold-legend input[type=number]{
+  width:80px; padding:3px 6px; border:1px solid var(--sea); border-radius:5px; font-family:inherit;
+}
 .livret-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px;}
 .livret-block{border:2px solid var(--sea); border-radius:8px; padding:14px 16px; background:#f6fbfc;}
 .livret-block h3{color:var(--navy); border-bottom:1px dashed var(--sea); padding-bottom:6px;}
@@ -482,6 +497,11 @@ footer{
   <div class="card">
     <h2><span class="num-badge">5</span> Épargnes et Défis</h2>
     <h3 style="color:var(--navy);">Épargnes court terme</h3>
+    <div class="threshold-legend">
+      <span class="legend-item"><span class="threshold-dot dot-red"></span> En dessous de <input type="number" step="50" id="seuilCTBas" value="3000"> €</span>
+      <span class="legend-item"><span class="threshold-dot dot-orange"></span> Entre <span id="seuilCTBasLabel">3 000 €</span> et <span id="seuilCTHautLabel">5 000 €</span></span>
+      <span class="legend-item"><span class="threshold-dot dot-green"></span> Au dessus de <input type="number" step="50" id="seuilCTHaut" value="5000"> €</span>
+    </div>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-epargne-ct">
         <thead><tr>
@@ -1079,6 +1099,7 @@ const META_KEY = "budgetSegala_meta_v1";
 const DATA_PREFIX = "budgetSegala_month_v1_";
 const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
+const SEUILS_CT_KEY = "budgetSegala_seuilsCT_v1";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1114,7 +1135,7 @@ function buildRowCells(cfg, prefillDesc){
   if (cfg.montant) html += `<td><input type="number" step="0.01" class="num montant-in"></td>`;
   if (cfg.objectif) html += `<td><input type="number" step="0.01" class="num objectif-in"></td>`;
   if (cfg.envelopeBalance) html += `
-    <td><input type="number" step="0.01" class="num start-balance-in"></td>
+    <td><input type="number" step="0.01" class="num start-balance-in"><span class="threshold-dot dot-red"></span></td>
     <td><input type="number" step="0.01" class="num depot-in"></td>
     <td><input type="number" step="0.01" class="num retrait-in"></td>
     <td class="end-balance-cell num" data-value="0">0,00 €</td>
@@ -1168,6 +1189,16 @@ function recalcTable(tableId){
     if (diffCell && budgetIn && reelIn) setDiffCell(diffCell, r-b);
 
     if (montantIn) tMontant += num(montantIn.value);
+
+    if (startIn){
+      const dot = tr.querySelector('.threshold-dot');
+      if (dot){
+        const v = num(startIn.value);
+        dot.classList.remove('dot-red','dot-orange','dot-green');
+        dot.classList.add(v < seuilCTBas ? 'dot-red' : (v < seuilCTHaut ? 'dot-orange' : 'dot-green'));
+        dot.title = `Déjà épargné : ${euro(v)}`;
+      }
+    }
 
     let gaugeAmount = null;
     if (startIn && depotIn && retraitIn && endCell){
@@ -1418,6 +1449,31 @@ function applyDescriptions(snapshot){
    (start + dépôt − retrait). Objectif carries over the same way. Only fills rows whose start
    balance hasn't already been resolved for this month (set by restoreRow when real saved data
    exists), so it never overwrites genuine data — safe to call unconditionally on every load. */
+/* red/orange/green threshold indicator on "Déjà épargné" for Épargnes court terme.
+   Global setting (not per-month) so it stays put regardless of which month is open. */
+let seuilCTBas = 3000, seuilCTHaut = 5000;
+
+function loadSeuilsCT(){
+  let raw;
+  try { raw = localStorage.getItem(SEUILS_CT_KEY); } catch(e){ raw = null; }
+  if (raw){
+    try {
+      const obj = JSON.parse(raw);
+      if (isFinite(obj.bas)) seuilCTBas = obj.bas;
+      if (isFinite(obj.haut)) seuilCTHaut = obj.haut;
+    } catch(e){}
+  }
+}
+function saveSeuilsCT(){
+  try { localStorage.setItem(SEUILS_CT_KEY, JSON.stringify({ bas: seuilCTBas, haut: seuilCTHaut })); } catch(e){}
+}
+function updateSeuilLabels(){
+  document.getElementById('seuilCTBas').value = seuilCTBas;
+  document.getElementById('seuilCTHaut').value = seuilCTHaut;
+  document.getElementById('seuilCTBasLabel').textContent = euro(seuilCTBas);
+  document.getElementById('seuilCTHautLabel').textContent = euro(seuilCTHaut);
+}
+
 function applyEnvelopeCarryForward(){
   const tableId = 'tbl-epargne-ct';
   let prevKey;
@@ -1472,10 +1528,11 @@ function goToMonth(newKey){
 
 /* ---------- backup / restore ---------- */
 function collectAllAppData(){
-  const out = { meta:null, months:{}, saves:null, descTemplate:null };
+  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null };
   try { out.meta = localStorage.getItem(META_KEY); } catch(e){}
   try { out.saves = localStorage.getItem(SAVES_KEY); } catch(e){}
   try { out.descTemplate = localStorage.getItem(DESC_TEMPLATE_KEY); } catch(e){}
+  try { out.seuilsCT = localStorage.getItem(SEUILS_CT_KEY); } catch(e){}
   try {
     for (let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
@@ -1501,7 +1558,8 @@ function createSave(name){
     savedAt: new Date().toISOString(),
     meta: data.meta,
     months: data.months,
-    descTemplate: data.descTemplate
+    descTemplate: data.descTemplate,
+    seuilsCT: data.seuilsCT
   };
   const list = getSaves();
   list.unshift(entry);
@@ -1518,6 +1576,7 @@ function restoreSave(id){
   try {
     if (entry.meta) localStorage.setItem(META_KEY, entry.meta);
     if (entry.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, entry.descTemplate);
+    if (entry.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, entry.seuilsCT);
     Object.entries(entry.months || {}).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e){}
   location.reload();
@@ -1789,6 +1848,7 @@ function importHtmlBackup(){
         if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
         if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
         if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
+        if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
         Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
       } catch(e){}
       location.reload();
@@ -1812,6 +1872,7 @@ function trySeedFromEmbeddedData(){
     if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
     if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
     if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
+    if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
     Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
   } catch(e){}
 }
@@ -1981,6 +2042,8 @@ document.getElementById('yearSelect').addEventListener('change', onMonthYearSele
 /* ---------- init ---------- */
 trySeedFromEmbeddedData();
 loadMeta();
+loadSeuilsCT();
+updateSeuilLabels();
 buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
@@ -1989,6 +2052,15 @@ saveState();
 recalcAll();
 populateMonthYearSelects();
 updateMonthIndicator();
+
+document.getElementById('seuilCTBas').addEventListener('input', ()=>{
+  seuilCTBas = num(document.getElementById('seuilCTBas').value);
+  updateSeuilLabels(); saveSeuilsCT(); recalcTable('tbl-epargne-ct');
+});
+document.getElementById('seuilCTHaut').addEventListener('input', ()=>{
+  seuilCTHaut = num(document.getElementById('seuilCTHaut').value);
+  updateSeuilLabels(); saveSeuilsCT(); recalcTable('tbl-epargne-ct');
+});
 
 /* offline support (PWA): only meaningful on the hosted https version — silently
    does nothing when this file is opened locally (file://) */
