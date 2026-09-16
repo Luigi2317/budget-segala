@@ -1510,34 +1510,46 @@ function updateSeuilLabels(){
   document.getElementById('seuilCTHautLabel').textContent = euro(seuilCTHaut);
 }
 
-/* Épargnes court terme (tbl-epargne-ct) also carries a running LEDGER balance across months —
-   unlike Objectif/Dépôt above (sticky constants, handled by applyDescriptions), "Déjà épargné"
-   genuinely chains from one month to the next (this month's start = last month's start+dépôt−retrait),
-   so it must look at the literal previous calendar month, not a floating template. Only fills the
-   field when it's still blank, so it never overwrites something she typed herself. */
-function applyEnvelopeCarryForward(){
-  const tableId = 'tbl-epargne-ct';
-  let prevKey;
-  try { prevKey = addMonthsToKey(currentMonth, -1); } catch(e){ return; }
-  let raw;
-  try { raw = localStorage.getItem(DATA_PREFIX+prevKey); } catch(e){ raw = null; }
-  let prevRows = [];
-  if (raw){
-    try { const data = JSON.parse(raw); prevRows = (data.tables && data.tables[tableId]) || []; } catch(e){}
-  }
-  const prevEndByDesc = {};
-  prevRows.forEach(rd=>{
-    if (!rd || !rd.desc || !rd.desc.trim()) return;
-    prevEndByDesc[rd.desc.trim()] = num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
-  });
+/* Épargnes court terme (tbl-epargne-ct) also carries a running LEDGER balance across months
+   ("Déjà épargné" = last known ending balance for that same envelope). Originally this looked up
+   the literal previous calendar month's saved data — fragile: it silently produced 0 whenever
+   that exact month's data was missing/skipped for any reason (device change, reset, irregular
+   navigation...). Reworked to the same robust, always-up-to-date global template already used
+   for descriptions/Budget/Objectif/Dépôt: a running "last known ending balance per envelope name"
+   map, refreshed on every saveState() call, applied to any blank field regardless of which month
+   came before. Never overwrites something she typed herself. */
+const ENVELOPE_BALANCE_KEY = "budgetSegala_envBalance_v1";
 
-  const tbody = document.getElementById(tableId).tBodies[0];
+function snapshotEnvelopeBalances(){
+  const out = {};
+  const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
+  [...tbody.rows].forEach(tr=>{
+    const descIn = tr.querySelector('.desc-in');
+    const startIn = tr.querySelector('.start-balance-in');
+    if (!descIn || !descIn.value.trim() || !startIn) return;
+    const depotIn = tr.querySelector('.depot-in');
+    const retraitIn = tr.querySelector('.retrait-in');
+    const end = num(startIn.value) + num(depotIn ? depotIn.value : 0) - num(retraitIn ? retraitIn.value : 0);
+    out[descIn.value.trim()] = end;
+  });
+  return out;
+}
+function saveEnvelopeBalanceTemplate(){
+  try { localStorage.setItem(ENVELOPE_BALANCE_KEY, JSON.stringify(snapshotEnvelopeBalances())); } catch(e){}
+}
+function loadEnvelopeBalanceTemplate(){
+  try { return JSON.parse(localStorage.getItem(ENVELOPE_BALANCE_KEY) || '{}'); } catch(e){ return {}; }
+}
+
+function applyEnvelopeCarryForward(){
+  const balances = loadEnvelopeBalanceTemplate();
+  const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
   [...tbody.rows].forEach(tr=>{
     const descIn = tr.querySelector('.desc-in');
     const startIn = tr.querySelector('.start-balance-in');
     if (!descIn || !startIn || startIn.value.trim()) return;
-    const end = prevEndByDesc[descIn.value.trim()];
-    if (end !== undefined) startIn.value = end.toFixed(2);
+    const desc = descIn.value.trim();
+    if (desc && balances[desc] !== undefined) startIn.value = balances[desc].toFixed(2);
   });
 }
 
@@ -1558,11 +1570,12 @@ function goToMonth(newKey){
 
 /* ---------- backup / restore ---------- */
 function collectAllAppData(){
-  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null };
+  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null, envBalance:null };
   try { out.meta = localStorage.getItem(META_KEY); } catch(e){}
   try { out.saves = localStorage.getItem(SAVES_KEY); } catch(e){}
   try { out.descTemplate = localStorage.getItem(DESC_TEMPLATE_KEY); } catch(e){}
   try { out.seuilsCT = localStorage.getItem(SEUILS_CT_KEY); } catch(e){}
+  try { out.envBalance = localStorage.getItem(ENVELOPE_BALANCE_KEY); } catch(e){}
   try {
     for (let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
@@ -1589,7 +1602,8 @@ function createSave(name){
     meta: data.meta,
     months: data.months,
     descTemplate: data.descTemplate,
-    seuilsCT: data.seuilsCT
+    seuilsCT: data.seuilsCT,
+    envBalance: data.envBalance
   };
   const list = getSaves();
   list.unshift(entry);
@@ -1607,6 +1621,7 @@ function restoreSave(id){
     if (entry.meta) localStorage.setItem(META_KEY, entry.meta);
     if (entry.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, entry.descTemplate);
     if (entry.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, entry.seuilsCT);
+    if (entry.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, entry.envBalance);
     Object.entries(entry.months || {}).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e){}
   location.reload();
@@ -1879,6 +1894,7 @@ function importHtmlBackup(){
         if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
         if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
         if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
+        if (payload.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, payload.envBalance);
         Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
       } catch(e){}
       location.reload();
@@ -1903,6 +1919,7 @@ function trySeedFromEmbeddedData(){
     if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
     if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
     if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
+    if (payload.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, payload.envBalance);
     Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
   } catch(e){}
 }
@@ -1944,6 +1961,7 @@ function saveState(){
   });
   try { localStorage.setItem(DATA_PREFIX+currentMonth, JSON.stringify(data)); } catch(e){ /* storage full or unavailable */ }
   saveDescTemplate();
+  saveEnvelopeBalanceTemplate();
 }
 
 function loadState(){
