@@ -190,14 +190,16 @@ button.add-row-btn:hover{background:var(--navy);}
 .dot-red{background:var(--coral);}
 .dot-orange{background:#e0902b;}
 .dot-green{background:var(--green);}
+.dot-none{background:#d9d9d9;}
+.dot-star{
+  background:#f5c542; border-color:#c99a19; color:#6b4e00;
+  font-size:10px; line-height:12px; text-align:center; font-weight:bold;
+}
 .threshold-legend{
   display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin:8px 0 14px;
   font-size:.88em; color:var(--navy); background:rgba(255,255,255,.55); border-radius:8px; padding:8px 12px;
 }
 .threshold-legend .legend-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
-.threshold-legend input[type=number]{
-  width:80px; padding:3px 6px; border:1px solid var(--sea); border-radius:5px; font-family:inherit;
-}
 .livret-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px;}
 .livret-block{border:2px solid var(--sea); border-radius:8px; padding:14px 16px; background:#f6fbfc;}
 .livret-block h3{color:var(--navy); border-bottom:1px dashed var(--sea); padding-bottom:6px;}
@@ -566,9 +568,10 @@ footer{
     <h2><span class="num-badge">5</span> Épargnes et Défis</h2>
     <h3 style="color:var(--navy);">Épargnes court terme</h3>
     <div class="threshold-legend">
-      <span class="legend-item"><span class="threshold-dot dot-red"></span> En dessous de <input type="number" step="50" id="seuilCTBas" value="3000"> €</span>
-      <span class="legend-item"><span class="threshold-dot dot-orange"></span> Entre <span id="seuilCTBasLabel">3 000 €</span> et <span id="seuilCTHautLabel">5 000 €</span></span>
-      <span class="legend-item"><span class="threshold-dot dot-green"></span> Au dessus de <input type="number" step="50" id="seuilCTHaut" value="5000"> €</span>
+      <span class="legend-item"><span class="threshold-dot dot-red"></span> Moins de 20 % de l'objectif</span>
+      <span class="legend-item"><span class="threshold-dot dot-orange"></span> De 20 % à 50 %</span>
+      <span class="legend-item"><span class="threshold-dot dot-green"></span> De 50 % à 100 %</span>
+      <span class="legend-item"><span class="threshold-dot dot-star">★</span> Objectif atteint</span>
     </div>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-epargne-ct">
@@ -1168,10 +1171,9 @@ const META_KEY = "budgetSegala_meta_v1";
 const DATA_PREFIX = "budgetSegala_month_v1_";
 const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
-const SEUILS_CT_KEY = "budgetSegala_seuilsCT_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (4)";
+const BUILD_VERSION = "2026-09-17 (5)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1214,11 +1216,11 @@ function buildRowCells(cfg, prefillDesc){
   if (cfg.montant) html += `<td><input type="number" step="0.01" class="num montant-in"></td>`;
   if (cfg.objectif) html += `<td><input type="number" step="0.01" class="num objectif-in"></td>`;
   if (cfg.envelopeBalance) html += `
-    <td><input type="number" step="0.01" class="num start-balance-in"><span class="threshold-dot dot-red"></span></td>
+    <td><input type="number" step="0.01" class="num start-balance-in"></td>
     <td><input type="number" step="0.01" class="num depot-in"></td>
     <td><input type="number" step="0.01" class="num retrait-in"></td>
     <td class="end-balance-cell num" data-value="0">0,00 €</td>
-    <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" style="width:0%;"></div></div><span class="mini-gauge-pct">0%</span></td>`;
+    <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" style="width:0%;"></div></div><span class="mini-gauge-pct">0%</span><span class="threshold-dot dot-none"></span></td>`;
   if (cfg.check)  html += `<td class="check-cell"><input type="checkbox" class="check-in"></td>`;
   if (cfg.removable) html += `<td class="rm-cell"><button type="button" class="rm-btn" title="Supprimer">✕</button></td>`;
   return html;
@@ -1269,16 +1271,6 @@ function recalcTable(tableId){
 
     if (montantIn) tMontant += num(montantIn.value);
 
-    if (startIn){
-      const dot = tr.querySelector('.threshold-dot');
-      if (dot){
-        const v = num(startIn.value);
-        dot.classList.remove('dot-red','dot-orange','dot-green');
-        dot.classList.add(v < seuilCTBas ? 'dot-red' : (v < seuilCTHaut ? 'dot-orange' : 'dot-green'));
-        dot.title = `Déjà épargné : ${euro(v)}`;
-      }
-    }
-
     let gaugeAmount = null;
     if (startIn && depotIn && retraitIn && endCell){
       const start = num(startIn.value);
@@ -1294,7 +1286,28 @@ function recalcTable(tableId){
       const o = num(objectifIn.value);
       tObjectif += o;
       const amount = gaugeAmount !== null ? gaugeAmount : num(montantIn ? montantIn.value : 0);
-      const pct = o > 0 ? Math.max(0, Math.min(100, (amount/o)*100)) : 0;
+      const rawPct = o > 0 ? (amount / o) * 100 : 0;          // peut dépasser 100
+      const pct = Math.max(0, Math.min(100, rawPct));          // la jauge, elle, plafonne
+
+      /* Pastille : uniquement un pourcentage de l'objectif, plus aucun montant à régler.
+         Placée dans la colonne Progression et non plus à côté de "Déjà épargné" : c'est là
+         qu'elle veut dire quelque chose, et ça reste lisible sur tablette, où il n'y a pas
+         de survol pour afficher une bulle d'aide. */
+      const dot = tr.querySelector('.threshold-dot');
+      if (dot){
+        dot.classList.remove('dot-red','dot-orange','dot-green','dot-star','dot-none');
+        dot.textContent = '';
+        if (o <= 0){
+          dot.classList.add('dot-none');
+          dot.title = "Pas d'objectif renseigné sur cette ligne.";
+        } else {
+          const p = Math.round(rawPct);
+          if (rawPct >= 100){ dot.classList.add('dot-star'); dot.textContent = '★'; dot.title = `Objectif atteint — ${p} % de l'objectif`; }
+          else if (rawPct >= 50){ dot.classList.add('dot-green');  dot.title = `${p} % de l'objectif`; }
+          else if (rawPct >= 20){ dot.classList.add('dot-orange'); dot.title = `${p} % de l'objectif`; }
+          else                  { dot.classList.add('dot-red');    dot.title = `${p} % de l'objectif`; }
+        }
+      }
       const fillEl = tr.querySelector('.mini-gauge-fill');
       const pctEl = tr.querySelector('.mini-gauge-pct');
       if (fillEl) fillEl.style.width = pct + '%';
@@ -1544,6 +1557,45 @@ function applyDescriptions(snapshot){
       if (descEl && !descEl.value.trim() && rowData.desc) descEl.value = rowData.desc; // never overwrite something already typed
     });
 
+    /* pass 1 bis : toute ligne du modèle ABSENTE de ce mois est ajoutée à la fin.
+       Sans ça, une catégorie créée dans un mois n'apparaissait jamais dans un mois déjà
+       rempli : ses lignes n'étant pas vides, la passe 1 ne les complétait pas et la passe 2
+       ne faisait que remplir des cases existantes. Le mois restait figé sur l'ancienne liste
+       — c'est exactement le "conflit de remplissage" constaté. */
+    const present = new Set();
+    [...tbody.rows].forEach(tr=>{
+      const el = tr.querySelector('.desc-in');
+      if (el && el.value.trim()) present.add(normDesc(el.value));
+    });
+    rows.forEach(rowData=>{
+      if (!rowData.desc || !rowData.desc.trim()) return;
+      const key = normDesc(rowData.desc);
+      if (present.has(key)) return;
+      addRow(id, rowData.desc);
+      present.add(key);
+    });
+
+    /* pass 1 ter : à l'inverse, une ligne supprimée du modèle disparaît de ce mois — mais
+       UNIQUEMENT si elle n'y porte aucun chiffre. Une ligne contenant de vrais montants
+       n'est jamais effacée automatiquement : ce serait détruire une saisie. Elle devra être
+       supprimée à la main dans les mois où elle contient quelque chose. */
+    if (ADDABLE_TABLES[id] && ADDABLE_TABLES[id].removable){
+      const templateKeys = new Set(
+        rows.filter(r => r.desc && r.desc.trim()).map(r => normDesc(r.desc))
+      );
+      [...tbody.rows].forEach(tr=>{
+        if (tbody.rows.length <= 1) return;         // on ne vide jamais complètement un tableau
+        const descEl = tr.querySelector('.desc-in');
+        if (!descEl) return;
+        const key = normDesc(descEl.value);
+        if (key && templateKeys.has(key)) return;   // toujours au modèle : on garde
+        const hasFigures = [...tr.querySelectorAll('input')].some(inp =>
+          inp !== descEl && (inp.type === 'checkbox' ? inp.checked : inp.value.trim() !== ''));
+        if (hasFigures) return;                     // porte des montants : on n'y touche pas
+        tr.remove();
+      });
+    }
+
     // pass 2: fill extra sticky fields (Budget/Objectif/Dépôt) by matching each row's *current*
     // description text against the template — never by row position. Position-matching would
     // silently put the wrong envelope's/item's figure on the wrong row whenever a row was ever
@@ -1564,30 +1616,10 @@ function applyDescriptions(snapshot){
   });
 }
 
-/* red/orange/green threshold indicator on "Déjà épargné" for Épargnes court terme.
-   Global setting (not per-month) so it stays put regardless of which month is open. */
-let seuilCTBas = 3000, seuilCTHaut = 5000;
+/* La pastille rouge / orange / verte / étoile des Épargnes court terme se calcule entièrement
+   à partir du pourcentage de l'objectif (voir recalcTable). Il n'y a donc plus aucun seuil en
+   euros à mémoriser ni à régler : l'ancienne clé budgetSegala_seuilsCT_v1 n'est plus utilisée. */
 
-function loadSeuilsCT(){
-  let raw;
-  try { raw = localStorage.getItem(SEUILS_CT_KEY); } catch(e){ raw = null; }
-  if (raw){
-    try {
-      const obj = JSON.parse(raw);
-      if (isFinite(obj.bas)) seuilCTBas = obj.bas;
-      if (isFinite(obj.haut)) seuilCTHaut = obj.haut;
-    } catch(e){}
-  }
-}
-function saveSeuilsCT(){
-  try { localStorage.setItem(SEUILS_CT_KEY, JSON.stringify({ bas: seuilCTBas, haut: seuilCTHaut })); } catch(e){}
-}
-function updateSeuilLabels(){
-  document.getElementById('seuilCTBas').value = seuilCTBas;
-  document.getElementById('seuilCTHaut').value = seuilCTHaut;
-  document.getElementById('seuilCTBasLabel').textContent = euro(seuilCTBas);
-  document.getElementById('seuilCTHautLabel').textContent = euro(seuilCTHaut);
-}
 
 /* ---------- Épargnes court terme : le report du solde (ledger) ----------
 
@@ -1699,11 +1731,10 @@ function goToMonth(newKey){
 
 /* ---------- backup / restore ---------- */
 function collectAllAppData(){
-  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null };
+  const out = { meta:null, months:{}, saves:null, descTemplate:null };
   try { out.meta = localStorage.getItem(META_KEY); } catch(e){}
   try { out.saves = localStorage.getItem(SAVES_KEY); } catch(e){}
   try { out.descTemplate = localStorage.getItem(DESC_TEMPLATE_KEY); } catch(e){}
-  try { out.seuilsCT = localStorage.getItem(SEUILS_CT_KEY); } catch(e){}
   try {
     for (let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
@@ -1729,8 +1760,7 @@ function createSave(name){
     savedAt: new Date().toISOString(),
     meta: data.meta,
     months: data.months,
-    descTemplate: data.descTemplate,
-    seuilsCT: data.seuilsCT
+    descTemplate: data.descTemplate
   };
   const list = getSaves();
   list.unshift(entry);
@@ -1747,7 +1777,6 @@ function restoreSave(id){
   try {
     if (entry.meta) localStorage.setItem(META_KEY, entry.meta);
     if (entry.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, entry.descTemplate);
-    if (entry.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, entry.seuilsCT);
     Object.entries(entry.months || {}).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e){}
   location.reload();
@@ -2019,7 +2048,6 @@ function importHtmlBackup(){
         if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
         if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
         if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
-        if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
         Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
       } catch(e){}
       location.reload();
@@ -2043,7 +2071,6 @@ function trySeedFromEmbeddedData(){
     if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
     if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
     if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
-    if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
     Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
   } catch(e){}
 }
@@ -2206,21 +2233,17 @@ document.getElementById('nextMonthBtn').addEventListener('click', ()=> goToMonth
 document.getElementById('nextYearBtn').addEventListener('click', ()=> goToMonth(addMonthsToKey(currentMonth, 12)));
 document.getElementById('firstMonthBtn').addEventListener('click', ()=> goToMonth(firstMonth));
 
-/* The month dropdown and year dropdown are otherwise fully independent (deliberately, so any
-   exact month+year can be picked, e.g. to review history). But that means picking "Janvier"
-   while the year still reads e.g. "2026" (left over from "Décembre 2026") literally means
-   Janvier 2026, not the "next" Janvier she meant — a natural, very likely typo of intent.
-   So: only when the MONTH dropdown itself is what changed, and the newly picked month number
-   is lower than the month we're leaving (i.e. it wrapped past a year boundary), bump the year
-   dropdown forward by one automatically. Changing the YEAR dropdown itself is never touched by
-   this — that one stays a fully deliberate, independent jump. */
+/* Les deux menus déroulants sont totalement indépendants : le mois choisi est le mois choisi,
+   l'année affichée est l'année affichée. Une version précédente avançait l'année toute seule
+   quand le mois reculait (Décembre -> Janvier), en supposant qu'on voulait l'année suivante.
+   Supprimé : ça se déclenchait aussi quand on revenait volontairement en arrière dans l'année,
+   et on se retrouvait projeté douze mois plus loin sans l'avoir demandé.
+   Pour passer de Décembre à Janvier de l'année suivante, le bouton ▶ mois suivant gère le
+   changement d'année correctement, ou bien il suffit de changer aussi le menu de l'année. */
 document.getElementById('monthSelect').addEventListener('change', ()=>{
-  const { m: oldM } = parseMonthKey(currentMonth); // 0-indexed month we're leaving
-  const newM = parseInt(document.getElementById('monthSelect').value, 10) - 1; // 0-indexed
-  let y = parseInt(document.getElementById('yearSelect').value, 10);
-  if (newM < oldM) y += 1;
-  document.getElementById('yearSelect').value = String(y);
-  goToMonth(`${y}-${pad2(newM + 1)}`);
+  const y = document.getElementById('yearSelect').value;
+  const m = document.getElementById('monthSelect').value;
+  goToMonth(`${y}-${m}`);
 });
 document.getElementById('yearSelect').addEventListener('change', ()=>{
   const m = document.getElementById('monthSelect').value;
@@ -2231,8 +2254,6 @@ document.getElementById('yearSelect').addEventListener('change', ()=>{
 /* ---------- init ---------- */
 trySeedFromEmbeddedData();
 loadMeta();
-loadSeuilsCT();
-updateSeuilLabels();
 buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
@@ -2241,15 +2262,6 @@ saveState();
 recalcAll();
 populateMonthYearSelects();
 updateMonthIndicator();
-
-document.getElementById('seuilCTBas').addEventListener('input', ()=>{
-  seuilCTBas = num(document.getElementById('seuilCTBas').value);
-  updateSeuilLabels(); saveSeuilsCT(); recalcTable('tbl-epargne-ct');
-});
-document.getElementById('seuilCTHaut').addEventListener('input', ()=>{
-  seuilCTHaut = num(document.getElementById('seuilCTHaut').value);
-  updateSeuilLabels(); saveSeuilsCT(); recalcTable('tbl-epargne-ct');
-});
 
 /* No service worker / offline cache here on purpose: this app requires a live connection
    to Supabase to do anything useful anyway, so there's no benefit to offline caching —
@@ -2317,7 +2329,6 @@ const LS_META = "budgetSegala_meta_v1";
 const LS_MONTH_PREFIX = "budgetSegala_month_v1_";
 const LS_SAVES = "budgetSegala_saves_v1";
 const LS_DESC_TEMPLATE = "budgetSegala_descTemplate_v1";
-const LS_SEUILS_CT = "budgetSegala_seuilsCT_v1";
 
 function safeParse(raw, fallback){
   if (!raw) return fallback;
@@ -2358,7 +2369,6 @@ async function pullFromCloud(user){
   if (settingsRow){
     if (settingsRow.meta) localStorage.setItem(LS_META, JSON.stringify(settingsRow.meta));
     if (settingsRow.desc_template) localStorage.setItem(LS_DESC_TEMPLATE, JSON.stringify(settingsRow.desc_template));
-    if (settingsRow.seuils_ct) localStorage.setItem(LS_SEUILS_CT, JSON.stringify(settingsRow.seuils_ct));
     if (settingsRow.saves) localStorage.setItem(LS_SAVES, JSON.stringify(settingsRow.saves));
   }
   const { data: monthRows } = await supabase.from('budget_months').select('*').eq('user_id', user.id);
@@ -2372,7 +2382,6 @@ async function pushSettings(user){
     user_id: user.id,
     meta: safeParse(localStorage.getItem(LS_META), {}),
     desc_template: safeParse(localStorage.getItem(LS_DESC_TEMPLATE), {}),
-    seuils_ct: safeParse(localStorage.getItem(LS_SEUILS_CT), {}),
     saves: safeParse(localStorage.getItem(LS_SAVES), []),
     updated_at: new Date().toISOString()
   });
@@ -2553,7 +2562,6 @@ document.getElementById('importOldBtn').addEventListener('click', ()=>{
           user_id: currentUser.id,
           meta: safeParse(payload.meta, {}),
           desc_template: safeParse(payload.descTemplate, {}),
-          seuils_ct: safeParse(payload.seuilsCT, {}),
           saves: safeParse(payload.saves, []),
           updated_at: new Date().toISOString()
         });
