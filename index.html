@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (7)";
+const BUILD_VERSION = "2026-09-17 (8)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1234,6 +1234,21 @@ function addRow(tableId, prefillDesc){
   tbody.appendChild(tr);
   if (cfg.removable){
     tr.querySelector('.rm-btn').addEventListener('click', () => {
+      /* Supprimer une ligne vaut pour ce mois ET les suivants. Quand des montants y sont déjà
+         saisis, on le dit avant, une seule fois : c'est le seul moment où l'utilisatrice peut
+         encore décider en connaissance de cause. */
+      const descEl = tr.querySelector('.desc-in');
+      const desc = descEl ? descEl.value.trim() : '';
+      if (desc && DESC_CARRY_TABLES.indexOf(tableId) !== -1){
+        const n = laterMonthsWithFigures(tableId, desc);
+        if (n > 0 && !confirm(
+              '« ' + desc + ' » contient aussi des montants dans ' + n + ' mois suivant'
+              + (n > 1 ? 's' : '') + '.\n\n'
+              + 'En supprimant cette ligne, elle disparaîtra de ce mois et des mois suivants, '
+              + 'avec les montants qui s\'y trouvent.\n'
+              + 'Les mois précédents ne sont pas touchés.\n\n'
+              + 'Supprimer quand même ?')) return;
+      }
       tr.remove();
       recalcTable(tableId);
       saveDescTemplate('geste');   // la suppression vaut pour ce mois et les suivants
@@ -1545,6 +1560,40 @@ function activeTemplateRows(tpl, id, monthKey){
 /* Une ligne "porte des chiffres" dès qu'un de ses champs autre que le libellé est renseigné.
    Sert à deux endroits : ne jamais supprimer automatiquement une saisie réelle, et distinguer
    une ligne fraîchement créée d'un vestige laissé par un mois déjà rempli. */
+/* Même question, sur une ligne telle qu'elle est stockée dans un mois (et non affichée). */
+function storedRowHasFigures(rd){
+  if (!rd || typeof rd !== 'object') return false;
+  return Object.keys(rd).some(k=>{
+    if (k === 'desc') return false;
+    const v = rd[k];
+    if (v === true) return true;
+    return typeof v === 'string' && v.trim() !== '';
+  });
+}
+
+/* Combien de mois POSTÉRIEURS au mois affiché contiennent encore des montants sur ce libellé.
+   Sert uniquement à prévenir avant une suppression réellement destructrice. */
+function laterMonthsWithFigures(tableId, desc){
+  const key = normDesc(desc);
+  if (!key) return 0;
+  let count = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(DATA_PREFIX) !== 0) continue;
+      const mk = k.slice(DATA_PREFIX.length);
+      if (mk <= currentMonth) continue;
+      let rows = [];
+      try {
+        const data = JSON.parse(localStorage.getItem(k) || '{}');
+        rows = (data.tables && data.tables[tableId]) || [];
+      } catch(e){ continue; }
+      if (rows.some(rd => rd && normDesc(rd.desc) === key && storedRowHasFigures(rd))) count++;
+    }
+  } catch(e){}
+  return count;
+}
+
 function rowHasFigures(tr, descEl){
   return [...tr.querySelectorAll('input')].some(inp =>
     inp !== descEl && (inp.type === 'checkbox' ? inp.checked : inp.value.trim() !== ''));
@@ -1705,13 +1754,29 @@ function applyDescriptions(tpl){
       const templateKeys = new Set(
         rows.filter(r => r.desc && r.desc.trim()).map(r => normDesc(r.desc))
       );
+      /* Lignes dont la suppression a été explicitement demandée à ce mois-ci ou avant : elles
+         s'en vont, montants compris. C'est le pendant exact de l'ajout — supprimer vaut pour
+         le mois courant et tous les suivants.
+         Toute AUTRE ligne portant des chiffres reste protégée : on n'efface jamais une saisie
+         qu'on n'a pas été prié d'effacer, par exemple une ligne d'un mois antérieur à la
+         création de l'enveloppe, ou un libellé que le modèle ne connaît pas encore. */
+      const arreteesIci = new Set();
+      templateList(tpl, id).forEach(e=>{
+        if (e && e.desc && e.desc.trim() && e.until && currentMonth >= e.until){
+          arreteesIci.add(normDesc(e.desc));
+        }
+      });
       [...tbody.rows].forEach(tr=>{
-        if (tbody.rows.length <= 1) return;         // on ne vide jamais complètement un tableau
         const descEl = tr.querySelector('.desc-in');
         if (!descEl) return;
         const key = normDesc(descEl.value);
         if (key && templateKeys.has(key)) return;   // toujours au modèle : on garde
-        if (rowHasFigures(tr, descEl)) return;      // porte des montants : on n'y touche pas
+        const stoppee = arreteesIci.has(key);
+        if (rowHasFigures(tr, descEl) && !stoppee) return;
+        /* Une ligne explicitement supprimée s'en va même si c'est la dernière : le tableau a
+           son bouton « + ajouter », il n'y a donc pas d'impasse. En revanche on ne vide jamais
+           un tableau par simple nettoyage de lignes vides. */
+        if (!stoppee && tbody.rows.length <= 1) return;
         tr.remove();
       });
     }
@@ -1855,9 +1920,12 @@ function goToMonth(newKey){
   saveMeta();
   resetFormBlank();
   loadState();
+  /* Recenser ce que ce mois contient déjà AVANT que applyDescriptions ne nettoie quoi que ce
+     soit : sinon une ligne que le modèle ne connaît pas encore serait effacée avant d'avoir
+     eu la moindre chance d'y entrer. */
+  saveDescTemplate('decouverte');
   applyDescriptions(loadDescTemplate());
   applyEnvelopeCarryForward();
-  saveDescTemplate('decouverte');
   saveState();
   recalcAll();
   updateMonthIndicator();
@@ -2402,9 +2470,9 @@ trySeedFromEmbeddedData();
 loadMeta();
 buildDefaultRows();
 loadState();
+saveDescTemplate('decouverte');
 applyDescriptions(loadDescTemplate());
 applyEnvelopeCarryForward();
-saveDescTemplate('decouverte');
 saveState();
 recalcAll();
 populateMonthYearSelects();
