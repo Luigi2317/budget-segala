@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (5)";
+const BUILD_VERSION = "2026-09-17 (7)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1234,7 +1234,10 @@ function addRow(tableId, prefillDesc){
   tbody.appendChild(tr);
   if (cfg.removable){
     tr.querySelector('.rm-btn').addEventListener('click', () => {
-      tr.remove(); recalcTable(tableId); saveState();
+      tr.remove();
+      recalcTable(tableId);
+      saveDescTemplate('geste');   // la suppression vaut pour ce mois et les suivants
+      saveState();
     });
   }
   return tr;
@@ -1494,56 +1497,175 @@ function updateMonthIndicator(){
   document.getElementById('firstMonthBtn').disabled = atFirst;
 }
 
-/* tables where the user types free-text line-item descriptions (not fixed, hardcoded categories).
-   Their descriptions — and a few other "sticky" fields (Budget, Objectif, Dépôt) that rarely
-   change month to month — are kept as a shared template (independent of month/year, tracks the
-   most recently saved values regardless of navigation order) so any month — this year, next
-   year, jumped-to out of order or not — always starts pre-filled; only genuinely fresh-each-month
-   amounts (Réel, Retrait...) stay blank. applyDescriptions() only ever fills BLANK cells, never
-   overwrites something already typed, so it is safe to call unconditionally, every time a month
-   is displayed. STICKY_EXTRA_FIELDS lists, per table, which extra input classes (besides
-   ".desc-in") ride along with the description in the template. */
+/* ---------- Le modèle de lignes, qui suit le fil du temps ----------
+
+   Les tableaux listés ci-dessous sont ceux dont les libellés sont saisis librement. Ces
+   libellés — et quelques champs "collants" (Budget, Objectif, Dépôt) qui changent rarement —
+   sont conservés dans un modèle partagé, pour que chaque mois s'ouvre déjà pré-rempli.
+
+   Ce modèle était intemporel : il s'appliquait identiquement à TOUS les mois. Conséquence,
+   une ligne créée en septembre apparaissait aussi en janvier précédent, et une ligne
+   supprimée disparaissait rétroactivement du passé. Chaque entrée porte donc désormais
+   deux dates :
+
+       since : premier mois où la ligne existe     (par défaut "0000-00" = a toujours existé)
+       until : premier mois où elle n'existe plus  (null = toujours d'actualité)
+
+   Une entrée vaut pour le mois M si  since <= M < until. Ajouter une ligne en septembre la
+   crée donc pour septembre ET tous les mois suivants, sans toucher au passé ; la supprimer en
+   septembre la retire de septembre et de la suite, en laissant le passé intact.
+
+   "0000-00" est la valeur de reprise donnée aux modèles enregistrés avant cette évolution :
+   ils valent pour tous les mois, exactement comme avant, pour ne rien casser chez les
+   utilisatrices existantes.
+
+   STICKY_EXTRA_FIELDS indique, par tableau, quels champs voyagent avec le libellé. */
 const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var',
   'tbl-enveloppes','tbl-depenses-semaine','tbl-economies-semaine','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
 const DEFAULT_DESCRIPTIONS = { 'tbl-enveloppes': CATEGORIES, 'tbl-depenses-semaine': CATEGORIES };
 const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'] };
 
-function snapshotDescriptions(){
-  const out = {};
-  DESC_CARRY_TABLES.forEach(id=>{
-    const tbody = document.getElementById(id).tBodies[0];
-    const extraFields = STICKY_EXTRA_FIELDS[id] || [];
-    out[id] = [...tbody.rows]
-      .map(tr=>{
-        const descEl = tr.querySelector('.desc-in');
-        const row = { desc: descEl ? descEl.value : '' };
-        extraFields.forEach(f=>{
-          const el = tr.querySelector(`.${f}-in`);
-          row[f] = el ? el.value : '';
-        });
-        return row;
-      })
-      .filter(row => row.desc.trim() !== '');
-  });
-  return out;
+const DAWN = '0000-00'; // "a toujours existé"
+
+function isActiveAt(entry, monthKey){
+  if (!entry || !entry.desc || !entry.desc.trim()) return false;
+  if (monthKey < (entry.since || DAWN)) return false;
+  if (entry.until && monthKey >= entry.until) return false;
+  return true;
 }
 
-function saveDescTemplate(){
-  try { localStorage.setItem(DESC_TEMPLATE_KEY, JSON.stringify(snapshotDescriptions())); } catch(e){}
+function templateList(tpl, id){
+  return Array.isArray(tpl[id]) ? tpl[id] : [];
+}
+
+function activeTemplateRows(tpl, id, monthKey){
+  return templateList(tpl, id).filter(e => isActiveAt(e, monthKey));
+}
+
+/* Une ligne "porte des chiffres" dès qu'un de ses champs autre que le libellé est renseigné.
+   Sert à deux endroits : ne jamais supprimer automatiquement une saisie réelle, et distinguer
+   une ligne fraîchement créée d'un vestige laissé par un mois déjà rempli. */
+function rowHasFigures(tr, descEl){
+  return [...tr.querySelectorAll('input')].some(inp =>
+    inp !== descEl && (inp.type === 'checkbox' ? inp.checked : inp.value.trim() !== ''));
+}
+
+/* Réconcilie le modèle avec ce qui est affiché, pour le mois courant uniquement.
+   Jamais un remplacement pur : on fusionne, sinon les dates seraient perdues à chaque frappe.
+
+   Trois modes, parce que toutes les sauvegardes ne se valent pas :
+
+     'valeurs'  (défaut) — déclenché à chaque frappe. Rafraîchit seulement les champs collants
+                des entrées déjà connues. Ne crée rien, ne supprime rien : sans cette retenue,
+                taper "test" laisserait derrière lui les entrées "t", "te" et "tes".
+     'decouverte' — ouverture d'un mois. Les libellés inconnus sont enregistrés comme ayant
+                TOUJOURS existé (since = DAWN), car on ne fait que constater ce qui était déjà
+                saisi ; les dater d'aujourd'hui couperait le report de solde des enveloppes
+                existantes. Aucune suppression n'est déduite d'une simple visite.
+     'geste'    — action explicite : fin de saisie d'un libellé, ou clic sur la croix. Là
+                seulement une ligne naît au mois courant, ou s'y arrête. */
+function updateDescTemplate(mode){
+  const monthKey = currentMonth;
+  const isGeste = (mode === 'geste');
+  const peutCreer = isGeste || (mode === 'decouverte');
+  const tpl = loadDescTemplate();
+
+  DESC_CARRY_TABLES.forEach(id=>{
+    const extraFields = STICKY_EXTRA_FIELDS[id] || [];
+    const list = templateList(tpl, id);
+    const byKey = {};
+    list.forEach(e => { if (e && e.desc && e.desc.trim()) byKey[normDesc(e.desc)] = e; });
+
+    const tbody = document.getElementById(id).tBodies[0];
+    const seen = new Set();
+
+    [...tbody.rows].forEach(tr=>{
+      const descEl = tr.querySelector('.desc-in');
+      if (!descEl || !descEl.value.trim()) return;
+      const key = normDesc(descEl.value);
+      seen.add(key);
+
+      let e = byKey[key];
+      if (!e){
+        if (!peutCreer) return;
+        // une ligne naît au mois courant si c'est un geste ; sinon on ne fait que constater
+        e = { desc: descEl.value, since: isGeste ? monthKey : DAWN, until: null };
+        byKey[key] = e;
+        list.push(e);
+      } else if (e.until && monthKey >= e.until){
+        if (!isGeste) return;
+        /* Le modèle la dit supprimée, or elle est là. Deux cas très différents :
+           - supprimée puis recréée dans le MÊME mois, ou ligne encore vierge
+             -> c'est une vraie recréation : elle repart d'ici.
+           - simple vestige d'un mois déjà rempli, qu'on a conservé parce qu'il porte des
+             montants -> la suppression demandée reste valable, on n'y touche pas. */
+        if (monthKey === e.until || !rowHasFigures(tr, descEl)){
+          e.since = monthKey;
+          e.until = null;
+        } else {
+          return;
+        }
+      } else if (!isActiveAt(e, monthKey)){
+        return; // entrée d'un futur qu'on n'a pas encore atteint : on la laisse tranquille
+      }
+
+      e.desc = descEl.value;
+      extraFields.forEach(fld=>{
+        const el = tr.querySelector(`.${fld}-in`);
+        if (el) e[fld] = el.value;
+      });
+    });
+
+    /* Une entrée valable pour ce mois mais absente du tableau ne peut être qu'une suppression
+       volontaire : applyDescriptions() vient justement de matérialiser toutes les entrées
+       valables avant le moindre enregistrement, donc son absence est un geste de l'utilisatrice. */
+    if (isGeste){
+      list.forEach(e=>{
+        if (!isActiveAt(e, monthKey)) return;
+        if (seen.has(normDesc(e.desc))) return;
+        e.until = monthKey;
+      });
+    }
+
+    /* Une entrée arrêtée le mois même de sa création n'est valable nulle part, mais on la
+       CONSERVE : elle sert de pierre tombale. Sans elle, une ligne restée dans un mois plus
+       tardif — conservée parce qu'elle porte des montants — recréerait l'entrée et la
+       suppression demandée serait annulée dans le dos de l'utilisatrice. */
+    tpl[id] = list.filter(e => e && e.desc && e.desc.trim());
+  });
+
+  return tpl;
+}
+
+function saveDescTemplate(mode){
+  try { localStorage.setItem(DESC_TEMPLATE_KEY, JSON.stringify(updateDescTemplate(mode))); } catch(e){}
 }
 
 function loadDescTemplate(){
-  try { return JSON.parse(localStorage.getItem(DESC_TEMPLATE_KEY) || '{}'); } catch(e){ return {}; }
+  let tpl;
+  try { tpl = JSON.parse(localStorage.getItem(DESC_TEMPLATE_KEY) || '{}'); } catch(e){ return {}; }
+  if (!tpl || typeof tpl !== 'object') return {};
+  // reprise des modèles enregistrés avant les dates : ils valent pour tous les mois
+  Object.keys(tpl).forEach(id=>{
+    if (!Array.isArray(tpl[id])) return;
+    tpl[id].forEach(e=>{
+      if (!e || typeof e !== 'object') return;
+      if (e.since === undefined) e.since = DAWN;
+      if (e.until === undefined) e.until = null;
+    });
+  });
+  return tpl;
 }
 
-function applyDescriptions(snapshot){
+function applyDescriptions(tpl){
   DESC_CARRY_TABLES.forEach(id=>{
     const extraFields = STICKY_EXTRA_FIELDS[id] || [];
-    let rows = (snapshot[id] && snapshot[id].length) ? snapshot[id] : null;
-    if (!rows){
+    let rows = activeTemplateRows(tpl, id, currentMonth);
+    /* Les libellés d'origine ne reviennent que si ce tableau n'a JAMAIS servi. Sans cette
+       nuance, tout vider ferait réapparaître les catégories par défaut au mois suivant. */
+    if (!rows.length && templateList(tpl, id).length === 0){
       const defaults = DEFAULT_DESCRIPTIONS[id];
-      if (!defaults || !defaults.length) return;
-      rows = defaults.map(d => ({ desc: d }));
+      if (defaults && defaults.length) rows = defaults.map(d => ({ desc: d }));
     }
     const tbody = document.getElementById(id).tBodies[0];
 
@@ -1589,9 +1711,7 @@ function applyDescriptions(snapshot){
         if (!descEl) return;
         const key = normDesc(descEl.value);
         if (key && templateKeys.has(key)) return;   // toujours au modèle : on garde
-        const hasFigures = [...tr.querySelectorAll('input')].some(inp =>
-          inp !== descEl && (inp.type === 'checkbox' ? inp.checked : inp.value.trim() !== ''));
-        if (hasFigures) return;                     // porte des montants : on n'y touche pas
+        if (rowHasFigures(tr, descEl)) return;      // porte des montants : on n'y touche pas
         tr.remove();
       });
     }
@@ -1652,8 +1772,20 @@ function rowEndBalance(rd){
 
 /* Le mois N-1 "utile" de chaque enveloppe : plus récent mois < beforeMonthKey ayant une donnée.
    Renvoie { descriptionNormalisée: soldeDeFin }. */
+/* Premier mois d'existence de chaque enveloppe, d'après le modèle daté. Une enveloppe
+   supprimée puis recréée repart de sa recréation : son "Déjà épargné" redevient saisissable
+   au lieu d'hériter, à son insu, du solde qu'elle portait dans sa vie précédente. */
+function envelopeSinceMap(){
+  const out = {};
+  templateList(loadDescTemplate(), 'tbl-epargne-ct').forEach(e=>{
+    if (e && e.desc && e.desc.trim()) out[normDesc(e.desc)] = e.since || DAWN;
+  });
+  return out;
+}
+
 function previousEnvelopeBalances(beforeMonthKey){
   const result = {};
+  const sinceByEnvelope = envelopeSinceMap();
   const earlierMonths = [];
   try {
     for (let i = 0; i < localStorage.length; i++){
@@ -1679,6 +1811,7 @@ function previousEnvelopeBalances(beforeMonthKey){
       if (!rd || !rd.desc || !rd.desc.trim()) return;
       const key = normDesc(rd.desc);
       if (result[key] !== undefined) return; // un mois plus récent a déjà répondu
+      if (mk < (sinceByEnvelope[key] || DAWN)) return; // antérieur à la création de l'enveloppe
       const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
                    || (rd.depot !== undefined && rd.depot !== '')
                    || (rd.retrait !== undefined && rd.retrait !== '');
@@ -1716,6 +1849,7 @@ function applyEnvelopeCarryForward(){
 
 function goToMonth(newKey){
   if (newKey === currentMonth) return;
+  saveDescTemplate('decouverte');
   saveState();
   currentMonth = newKey;
   saveMeta();
@@ -1723,6 +1857,7 @@ function goToMonth(newKey){
   loadState();
   applyDescriptions(loadDescTemplate());
   applyEnvelopeCarryForward();
+  saveDescTemplate('decouverte');
   saveState();
   recalcAll();
   updateMonthIndicator();
@@ -2161,6 +2296,17 @@ document.addEventListener('input', e=>{
   }
 });
 
+/* Un libellé n'entre dans le modèle qu'une fois la saisie terminée — perte du focus ou touche
+   Entrée — et jamais lettre par lettre. C'est ce qui évite la traînée "t", "te", "tes". */
+document.addEventListener('change', e=>{
+  if (!e.target.matches('.desc-in')) return;
+  saveDescTemplate('geste');
+  const table = e.target.closest('table.budget-table');
+  if (table && table.id === 'tbl-epargne-ct') applyEnvelopeCarryForward();
+  if (table) recalcTable(table.id);
+  saveState();
+});
+
 document.addEventListener('click', e=>{
   const addBtn = e.target.closest('.add-row-btn');
   if (addBtn){
@@ -2258,6 +2404,7 @@ buildDefaultRows();
 loadState();
 applyDescriptions(loadDescTemplate());
 applyEnvelopeCarryForward();
+saveDescTemplate('decouverte');
 saveState();
 recalcAll();
 populateMonthYearSelects();
