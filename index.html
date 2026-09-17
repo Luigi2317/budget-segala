@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (8)";
+const BUILD_VERSION = "2026-09-17 (9)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1718,14 +1718,26 @@ function applyDescriptions(tpl){
     }
     const tbody = document.getElementById(id).tBodies[0];
 
-    // pass 1: ensure enough rows exist, and fill blank descriptions by position — this only
-    // matters to establish the row set on a brand-new month (blank rows, in template order)
+    /* pass 1 : garantir assez de lignes, et remplir les descriptions vides par position —
+       utile surtout pour établir la liste sur un mois encore vierge.
+       Le garde-fou `dejaPresent` est indispensable : sans lui, un mois dont les lignes ne sont
+       pas dans le même ordre que le modèle se retrouvait avec des DOUBLONS, la même catégorie
+       étant réécrite dans une ligne vide alors qu'elle existait déjà plus haut. */
     while (tbody.rows.length < rows.length) addRow(id);
+    const dejaPresent = new Set();
+    [...tbody.rows].forEach(tr=>{
+      const el = tr.querySelector('.desc-in');
+      if (el && el.value.trim()) dejaPresent.add(normDesc(el.value));
+    });
     rows.forEach((rowData, i)=>{
       const tr = tbody.rows[i];
-      if (!tr) return;
+      if (!tr || !rowData.desc) return;
       const descEl = tr.querySelector('.desc-in');
-      if (descEl && !descEl.value.trim() && rowData.desc) descEl.value = rowData.desc; // never overwrite something already typed
+      if (!descEl || descEl.value.trim()) return;      // ne jamais écraser une saisie
+      const key = normDesc(rowData.desc);
+      if (dejaPresent.has(key)) return;                // déjà présente ailleurs dans le tableau
+      descEl.value = rowData.desc;
+      dejaPresent.add(key);
     });
 
     /* pass 1 bis : toute ligne du modèle ABSENTE de ce mois est ajoutée à la fin.
