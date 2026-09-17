@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (10)";
+const BUILD_VERSION = "2026-09-17 (11)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1549,6 +1549,49 @@ function isActiveAt(entry, monthKey){
   return true;
 }
 
+/* Valeur la plus récente de chaque champ collant, prise dans les mois STRICTEMENT antérieurs.
+
+   C'était la cause de fond des valeurs qui voyageaient toutes seules : le modèle ne gardait
+   qu'UNE valeur par catégorie, réécrite à chaque enregistrement par le mois affiché. Ouvrir
+   décembre écrasait donc la référence de janvier ; corriger septembre ne se voyait nulle part.
+   Aucune valeur n'est plus stockée dans le modèle — il ne contient que la liste des lignes et
+   leurs dates. Le résultat ne dépend plus de l'ordre dans lequel les mois ont été consultés. */
+function previousFieldValues(tableId, fields, beforeMonthKey){
+  const result = {};
+  if (!fields || !fields.length) return result;
+  const earlier = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf(DATA_PREFIX) === 0){
+        const mk = k.slice(DATA_PREFIX.length);
+        if (mk < beforeMonthKey) earlier.push(mk);   // "AAAA-MM" : ordre alphabétique = chronologique
+      }
+    }
+  } catch(e){ return result; }
+  earlier.sort().reverse();
+
+  earlier.forEach(mk => {
+    let rows = [];
+    try {
+      const data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || '{}');
+      rows = (data.tables && data.tables[tableId]) || [];
+    } catch(e){ return; }
+    rows.forEach(rd => {
+      if (!rd || !rd.desc || !String(rd.desc).trim()) return;
+      const key = normDesc(rd.desc);
+      const bucket = result[key] || (result[key] = {});
+      fields.forEach(fld => {
+        if (bucket[fld] !== undefined) return;       // un mois plus récent a déjà répondu
+        const v = rd[fld];
+        if (v === undefined || v === null || String(v).trim() === '') return;
+        bucket[fld] = String(v);
+      });
+    });
+  });
+  return result;
+}
+
 function templateList(tpl, id){
   return Array.isArray(tpl[id]) ? tpl[id] : [];
 }
@@ -1659,10 +1702,6 @@ function updateDescTemplate(mode){
       }
 
       e.desc = descEl.value;
-      extraFields.forEach(fld=>{
-        const el = tr.querySelector(`.${fld}-in`);
-        if (el) e[fld] = el.value;
-      });
     });
 
     /* Une entrée valable pour ce mois mais absente du tableau ne peut être qu'une suppression
@@ -1680,6 +1719,9 @@ function updateDescTemplate(mode){
        CONSERVE : elle sert de pierre tombale. Sans elle, une ligne restée dans un mois plus
        tardif — conservée parce qu'elle porte des montants — recréerait l'entrée et la
        suppression demandée serait annulée dans le dos de l'utilisatrice. */
+    /* Nettoyage des valeurs héritées de l'ancien fonctionnement : elles ne sont plus lues,
+       les laisser ne ferait qu'entretenir la confusion en relisant le stockage. */
+    list.forEach(e => extraFields.forEach(fld => { delete e[fld]; }));
     tpl[id] = list.filter(e => e && e.desc && e.desc.trim());
   });
 
@@ -1804,15 +1846,14 @@ function applyDescriptions(tpl){
     // silently put the wrong envelope's/item's figure on the wrong row whenever a row was ever
     // added, removed, or reordered between the month that saved the template and this one.
     if (extraFields.length){
-      const byDesc = {};
-      rows.forEach(rowData => { if (rowData.desc && rowData.desc.trim()) byDesc[normDesc(rowData.desc)] = rowData; });
+      const repris = previousFieldValues(id, extraFields, currentMonth);
       [...tbody.rows].forEach(tr=>{
         const descEl = tr.querySelector('.desc-in');
-        const match = descEl && byDesc[normDesc(descEl.value)];
+        const match = descEl && repris[normDesc(descEl.value)];
         if (!match) return;
-        extraFields.forEach(f=>{
-          const el = tr.querySelector(`.${f}-in`);
-          if (el && !el.value.trim() && match[f]) el.value = match[f];
+        extraFields.forEach(fld=>{
+          const el = tr.querySelector(`.${fld}-in`);
+          if (el && !el.value.trim() && match[fld]) el.value = match[fld];
         });
       });
     }
@@ -2382,15 +2423,91 @@ document.addEventListener('input', e=>{
   }
 });
 
+const NOM_CHAMP = { budget: 'Budget', objectif: 'Objectif', depot: 'Dépôt ce mois' };
+
+/* Applique une valeur reportée à tous les mois POSTÉRIEURS, dans les données enregistrées.
+   Même règle que pour l'ajout et la suppression d'une ligne : ce qu'on change vaut pour le mois
+   courant et la suite, jamais pour le passé. On ne demande confirmation que si des mois suivants
+   portent une valeur DIFFÉRENTE — sinon on ne dérange personne. */
+function propagerValeurEnAvant(tableId, desc, field, value){
+  const key = normDesc(desc);
+  if (!key) return;
+  const cibles = [];
+  let conflits = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(DATA_PREFIX) !== 0) continue;
+      const mk = k.slice(DATA_PREFIX.length);
+      if (mk <= currentMonth) continue;
+      let data;
+      try { data = JSON.parse(localStorage.getItem(k) || '{}'); } catch(e){ continue; }
+      const rows = (data.tables && data.tables[tableId]) || [];
+      const touche = rows.some(rd => rd && normDesc(rd.desc) === key);
+      if (!touche) continue;
+      rows.forEach(rd => {
+        if (!rd || normDesc(rd.desc) !== key) return;
+        const actuel = rd[field];
+        if (actuel !== undefined && String(actuel).trim() !== '' && String(actuel) !== String(value)) conflits++;
+      });
+      cibles.push({ mk, k, data, rows });
+    }
+  } catch(e){ return; }
+  if (!cibles.length) return;
+
+  if (conflits > 0){
+    const nom = NOM_CHAMP[field] || field;
+    if (!confirm(
+      nom + ' de « ' + desc + ' » : ' + conflits + ' mois suivant' + (conflits > 1 ? 's portent' : ' porte')
+      + ' une valeur différente.\n\n'
+      + 'Veux-tu appliquer ' + value + ' à tous les mois suivants ?\n'
+      + 'Les mois précédents ne sont pas touchés.')) return;
+  }
+
+  const modifies = [];
+  cibles.forEach(c => {
+    let change = false;
+    c.rows.forEach(rd => {
+      if (!rd || normDesc(rd.desc) !== key) return;
+      if (String(rd[field] === undefined ? '' : rd[field]) === String(value)) return;
+      rd[field] = value;
+      change = true;
+    });
+    if (!change) return;
+    try { localStorage.setItem(c.k, JSON.stringify(c.data)); modifies.push(c.mk); } catch(e){}
+  });
+
+  // ces mois-là ont changé hors de l'écran : il faut aussi les remonter dans le compte
+  if (modifies.length && window.__markMonthDirty) modifies.forEach(window.__markMonthDirty);
+  if (modifies.length && window.__syncToCloud) window.__syncToCloud();
+}
+
 /* Un libellé n'entre dans le modèle qu'une fois la saisie terminée — perte du focus ou touche
    Entrée — et jamais lettre par lettre. C'est ce qui évite la traînée "t", "te", "tes". */
 document.addEventListener('change', e=>{
-  if (!e.target.matches('.desc-in')) return;
-  saveDescTemplate('geste');
   const table = e.target.closest('table.budget-table');
-  if (table && table.id === 'tbl-epargne-ct') applyEnvelopeCarryForward();
-  if (table) recalcTable(table.id);
+  if (!table) return;
+
+  if (e.target.matches('.desc-in')){
+    saveDescTemplate('geste');
+    if (table.id === 'tbl-epargne-ct') applyEnvelopeCarryForward();
+    recalcTable(table.id);
+    saveState();
+    return;
+  }
+
+  /* Champs reportés d'un mois sur l'autre (Budget, Objectif, Dépôt) : une correction vaut
+     pour ce mois et les suivants. C'est aussi ce qui permet de réparer d'un geste une valeur
+     erronée qui s'était propagée. */
+  const sticky = STICKY_EXTRA_FIELDS[table.id] || [];
+  const field = sticky.find(fld => e.target.matches('.' + fld + '-in'));
+  if (!field) return;
+  const tr = e.target.closest('tr');
+  const descEl = tr && tr.querySelector('.desc-in');
+  const desc = descEl ? descEl.value.trim() : '';
+  if (!desc) return;
   saveState();
+  propagerValeurEnAvant(table.id, desc, field, e.target.value);
 });
 
 document.addEventListener('click', e=>{
@@ -2707,6 +2824,7 @@ async function handleAuthed(user){
 async function bootstrapSession(user){
   currentUser = user;
   window.__syncToCloud = scheduleSyncToCloud;
+  window.__markMonthDirty = (mk) => { if (mk) dirtyMonths.add(mk); };
   document.getElementById('loggedInAs').textContent = user.email;
 
   const pulledKey = 'pulledFor_' + user.id;
@@ -2736,6 +2854,7 @@ async function bootstrapSession(user){
 function handleLoggedOut(){
   currentUser = null;
   window.__syncToCloud = null;
+  window.__markMonthDirty = null;
   document.getElementById('authGate').style.display = 'flex';
   document.getElementById('appContent').style.display = 'none';
 }
