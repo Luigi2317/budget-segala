@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#0b3d59">
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAADhElEQVR42u3cwW3DQAxFQd1TUwpJ/4U4LSSQtPwkx8C7xsYux5IdS9fX989H2tplEQSABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgASABIAEgATAjP7ysE4ArBp4IAAw+CAAYPBBAMDwQwCA4YcAAMMPAQCGHwIADD8EABh+CAAw/BAAAAAAADQd/pTnEABHAaQ/FwCKHEgIAGgNoPPzAqCYIYQAgFYApr4GAAAAAAAAAAAAgILBAwAAAAAAoNvpz1OnL06DAAAAAAC6nQJVALBvAAAgAAAQAMWfA5I+RwgAAATAyR+jnQYEAABRCE7iMfwAxF0QcwoOAACMuBj+7vPZLwDW3RHC8AMAAAAAuC+QAFiIwL4AsBaB/QAAAAGwEYF9AGAtAusPwIqvNuEBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAGTfWEgAACAAABAAAAgAAAQCAAABAAAAgAAAQAAAIAAAEAAACAAABAIAAAEAAACAAABAAAAgAAACwEAAAIAAAEAAACAAABAAAAgAAAQCAAABAAAAgAAAQAAAIAAAEAAAdhgqA2esLAAAAAAAAAAAAAAAAAAAAQNAmdQOw5VsrALxWAADwWgEAwGsFwAdhA7XnA/A6AJWb5WgFAAAAAAAAAAAs3DBQAQAAAAASNq1i4yYiBcBRwFEKAEeBjUABAAAAACCYAGDr8AMAAADb775wajOnwJx2xwoADm3qBJQAOAqsB+C+QKGDnf7O1h3kf9cZgOLfpqch6IzxztoCULRZdx6TAUxZzxUAKh8TAUxaz/EAnlr0lE3rBvDJdUxGcE1/509B0AnfG8OfigCAQxtXMShJ6wdA4blqAoJ0cCeGH4CiD2pP/+1kAKlrlopgFYDKw/nbQ9JhvQAIAFB1WH9rSLqtFQABACo29ukhmbpOABxc8JP/+Ekdxoo1AqDofLb6v6Op/7VN2g8AChZ88yNxP/wUouh7e4OftR8ANPi+fsPwA9AQQddfTSYOf/V+uCCmaLEN/vy7x7W5JLJysQ1+1n64KH7hBTrT3nkBAMHgAwCDoQcABkMPABAGHgAJAAkACQAJAAkACQAJAAkACQAJAAkACQAJAAkACQAJAAkACQAJAAkACQAJAOnzCztEL/R4m1UOAAAAAElFTkSuQmCC">
 <style>
 :root{
   --navy:#0b3d59;
@@ -144,6 +145,8 @@ table.budget-table input[type=date]{
 }
 table.budget-table input[type=text]{text-align:left;}
 table.budget-table input:focus{outline:2px solid var(--sea-light); border-radius:3px;}
+/* case calculée automatiquement (reportée du mois précédent) : non modifiable, teinte discrète */
+table.budget-table input.derived{background:#eef4f6; color:var(--navy); font-weight:bold; cursor:default;}
 table.budget-table tfoot td{
   background:#f0dfc8; font-weight:bold; color:var(--navy);
 }
@@ -261,6 +264,71 @@ footer{
 </style>
 </head>
 <body>
+
+<style>
+  #appContent{display:none;}
+  #authGate{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family: Georgia, 'Times New Roman', serif; background:linear-gradient(180deg,#dff1f5 0%, #f4ecd8 100%);
+    color:#22303c; padding:20px; box-sizing:border-box;
+  }
+  #authGate .card{
+    background:#fffdf6; border:1px solid #e3d9bd; border-radius:12px; box-shadow:0 6px 18px rgba(11,61,89,.15);
+    padding:28px 30px; width:100%; max-width:380px;
+  }
+  #authGate h1{color:#0b3d59; font-size:1.4em; margin:0 0 6px; text-align:center;}
+  #authGate .subtitle{text-align:center; color:#0b3d59; opacity:.75; font-style:italic; font-size:.85em; margin-bottom:20px;}
+  #authGate label{display:block; font-weight:bold; color:#0b3d59; margin:12px 0 4px; font-size:.9em;}
+  #authGate input[type=email], #authGate input[type=password]{
+    width:100%; padding:9px 10px; border:1px solid #1f6f8b; border-radius:6px; font-family:inherit; font-size:1em;
+    box-sizing:border-box;
+  }
+  #authGate .btn-row{display:flex; gap:10px; margin-top:18px;}
+  #authGate button{
+    flex:1; padding:10px; border:none; border-radius:20px; font-family:inherit; font-size:.95em; cursor:pointer;
+    background:#1f6f8b; color:#fff; transition:background .15s;
+  }
+  #authGate button:hover{background:#0b3d59;}
+  #authGate button.secondary{background:#fff; color:#1f6f8b; border:1px solid #1f6f8b;}
+  #authGate button.secondary:hover{background:#f0f7f9;}
+  #authMessage{margin-top:14px; font-size:.88em; text-align:center; min-height:1.2em;}
+  #authMessage.error{color:#d64550;}
+  #authMessage.ok{color:#2a7a4f;}
+  #logoutBar{
+    position:sticky; top:0; z-index:500; background:#0b3d59; color:#fff; font-family:Georgia,serif;
+    font-size:.82em; padding:6px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  #logoutBar button{
+    background:transparent; border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:14px;
+    padding:3px 12px; font-family:inherit; font-size:.9em; cursor:pointer;
+  }
+  #logoutBar button:hover{background:rgba(255,255,255,.15);}
+</style>
+
+<div id="authGate">
+  <div class="card">
+    <h1>⚓ Budget Ségala</h1>
+    <div class="subtitle">Espace client</div>
+    <label for="authEmail">Email</label>
+    <input type="email" id="authEmail" autocomplete="email" placeholder="toi@exemple.fr">
+    <label for="authPassword">Mot de passe</label>
+    <input type="password" id="authPassword" autocomplete="current-password" placeholder="Au moins 6 caractères">
+    <div class="btn-row">
+      <button type="button" id="authLoginBtn">Se connecter</button>
+      <button type="button" id="authSignupBtn" class="secondary">S'inscrire</button>
+    </div>
+    <div id="authMessage"></div>
+  </div>
+</div>
+
+<div id="appContent">
+<div id="logoutBar">
+  <span><span id="loggedInAs"></span><span id="syncState" style="opacity:.75; margin-left:10px;"></span></span>
+  <span style="display:flex; gap:8px;">
+    <button type="button" id="importOldBtn" title="Récupère les données d'une sauvegarde de l'ancien outil (fichier .html exporté)">⬆️ Importer mes anciennes données</button>
+    <button type="button" id="logoutBtn">Se déconnecter</button>
+  </span>
+</div>
 
 <header class="hero">
   <div class="boat-scene" aria-hidden="true">
@@ -675,6 +743,7 @@ footer{
 </div>
 
 <footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.7em; opacity:.6;"></span></footer>
+</div><!-- /#appContent -->
 
 <script>
 /* jsPDF v2.5.1 - MIT License - https://github.com/parallax/jsPDF */
@@ -1102,7 +1171,7 @@ const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 const SEUILS_CT_KEY = "budgetSegala_seuilsCT_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17";
+const BUILD_VERSION = "2026-09-17 (4)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1520,46 +1589,96 @@ function updateSeuilLabels(){
   document.getElementById('seuilCTHautLabel').textContent = euro(seuilCTHaut);
 }
 
-/* Épargnes court terme (tbl-epargne-ct) also carries a running LEDGER balance across months
-   ("Déjà épargné" = last known ending balance for that same envelope). Originally this looked up
-   the literal previous calendar month's saved data — fragile: it silently produced 0 whenever
-   that exact month's data was missing/skipped for any reason (device change, reset, irregular
-   navigation...). Reworked to the same robust, always-up-to-date global template already used
-   for descriptions/Budget/Objectif/Dépôt: a running "last known ending balance per envelope name"
-   map, refreshed on every saveState() call, applied to any blank field regardless of which month
-   came before. Never overwrites something she typed herself. */
-const ENVELOPE_BALANCE_KEY = "budgetSegala_envBalance_v1";
+/* ---------- Épargnes court terme : le report du solde (ledger) ----------
 
-function snapshotEnvelopeBalances(){
-  const out = {};
-  const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
-  [...tbody.rows].forEach(tr=>{
-    const descIn = tr.querySelector('.desc-in');
-    const startIn = tr.querySelector('.start-balance-in');
-    if (!descIn || !descIn.value.trim() || !startIn) return;
-    const depotIn = tr.querySelector('.depot-in');
-    const retraitIn = tr.querySelector('.retrait-in');
-    const end = num(startIn.value) + num(depotIn ? depotIn.value : 0) - num(retraitIn ? retraitIn.value : 0);
-    out[normDesc(descIn.value)] = end;
+   Règle métier, littéralement :
+       Montant total (mois N)   = Déjà épargné + Dépôt ce mois − Retrait ce mois
+       Déjà épargné  (mois N+1) = Montant total (mois N)
+
+   Deux tentatives précédentes ont échoué, il faut comprendre pourquoi pour ne pas y revenir :
+     1. lire uniquement le mois calendaire juste avant → cassait dès qu'un mois était sauté
+        ou absent (résultat : remise à 0 silencieuse) ;
+     2. garder un "dernier solde connu" global réécrit à chaque frappe → ne représentait pas
+        "le mois précédent" mais "le dernier mois affiché" : revenir consulter un mois ancien
+        empoisonnait la valeur pour tous les mois créés ensuite.
+
+   Version actuelle : aucune mémoire intermédiaire. On relit directement les mois réellement
+   enregistrés, on prend le plus récent STRICTEMENT ANTÉRIEUR au mois courant qui contient une
+   donnée pour cette enveloppe (les mois vides sont traversés : sans mouvement, le solde se
+   propage), et on en recalcule la fin. Déterministe : même résultat quel que soit l'ordre de
+   navigation, et insensible à ce qui a été consulté avant.
+
+   Le champ reste modifiable, mais il n'est saisi à la main que pour le tout PREMIER mois d'une
+   enveloppe (aucun mois antérieur → rien à reporter, c'est le point de départ). Dès qu'un mois
+   antérieur existe, la valeur est dérivée : on la réécrit systématiquement, jamais "seulement
+   si vide" — sinon une valeur périmée survivrait à une correction faite en amont. */
+
+/* Solde de fin (= "Montant total") d'une ligne telle qu'elle est stockée dans un mois. */
+function rowEndBalance(rd){
+  return num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
+}
+
+/* Le mois N-1 "utile" de chaque enveloppe : plus récent mois < beforeMonthKey ayant une donnée.
+   Renvoie { descriptionNormalisée: soldeDeFin }. */
+function previousEnvelopeBalances(beforeMonthKey){
+  const result = {};
+  const earlierMonths = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf(DATA_PREFIX) === 0){
+        const mk = k.slice(DATA_PREFIX.length);
+        // "AAAA-MM" zéro-paddé : l'ordre alphabétique EST l'ordre chronologique
+        if (mk < beforeMonthKey) earlierMonths.push(mk);
+      }
+    }
+  } catch(e){ return result; }
+
+  earlierMonths.sort().reverse(); // du plus récent au plus ancien
+
+  earlierMonths.forEach(mk => {
+    let rows = [];
+    try {
+      const data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || '{}');
+      rows = (data.tables && data.tables['tbl-epargne-ct']) || [];
+    } catch(e){ return; }
+
+    rows.forEach(rd => {
+      if (!rd || !rd.desc || !rd.desc.trim()) return;
+      const key = normDesc(rd.desc);
+      if (result[key] !== undefined) return; // un mois plus récent a déjà répondu
+      const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
+                   || (rd.depot !== undefined && rd.depot !== '')
+                   || (rd.retrait !== undefined && rd.retrait !== '');
+      if (!hasData) return;                  // mois sans mouvement : on remonte encore
+      result[key] = rowEndBalance(rd);
+    });
   });
-  return out;
-}
-function saveEnvelopeBalanceTemplate(){
-  try { localStorage.setItem(ENVELOPE_BALANCE_KEY, JSON.stringify(snapshotEnvelopeBalances())); } catch(e){}
-}
-function loadEnvelopeBalanceTemplate(){
-  try { return JSON.parse(localStorage.getItem(ENVELOPE_BALANCE_KEY) || '{}'); } catch(e){ return {}; }
+
+  return result;
 }
 
 function applyEnvelopeCarryForward(){
-  const balances = loadEnvelopeBalanceTemplate();
+  const prevBalances = previousEnvelopeBalances(currentMonth);
   const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
   [...tbody.rows].forEach(tr=>{
     const descIn = tr.querySelector('.desc-in');
     const startIn = tr.querySelector('.start-balance-in');
-    if (!descIn || !startIn || startIn.value.trim()) return;
+    if (!descIn || !startIn) return;
     const desc = normDesc(descIn.value);
-    if (desc && balances[desc] !== undefined) startIn.value = balances[desc].toFixed(2);
+    const prev = desc ? prevBalances[desc] : undefined;
+
+    if (prev === undefined){
+      // premier mois de cette enveloppe : montant de départ saisi à la main
+      startIn.readOnly = false;
+      startIn.title = "Premier mois de cette enveloppe : saisis ici ce que tu avais déjà de côté.";
+      startIn.classList.remove('derived');
+      return;
+    }
+    startIn.value = prev.toFixed(2);
+    startIn.readOnly = true;
+    startIn.title = "Reporté automatiquement : c'est le Montant total du mois précédent.";
+    startIn.classList.add('derived');
   });
 }
 
@@ -1580,12 +1699,11 @@ function goToMonth(newKey){
 
 /* ---------- backup / restore ---------- */
 function collectAllAppData(){
-  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null, envBalance:null };
+  const out = { meta:null, months:{}, saves:null, descTemplate:null, seuilsCT:null };
   try { out.meta = localStorage.getItem(META_KEY); } catch(e){}
   try { out.saves = localStorage.getItem(SAVES_KEY); } catch(e){}
   try { out.descTemplate = localStorage.getItem(DESC_TEMPLATE_KEY); } catch(e){}
   try { out.seuilsCT = localStorage.getItem(SEUILS_CT_KEY); } catch(e){}
-  try { out.envBalance = localStorage.getItem(ENVELOPE_BALANCE_KEY); } catch(e){}
   try {
     for (let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
@@ -1612,8 +1730,7 @@ function createSave(name){
     meta: data.meta,
     months: data.months,
     descTemplate: data.descTemplate,
-    seuilsCT: data.seuilsCT,
-    envBalance: data.envBalance
+    seuilsCT: data.seuilsCT
   };
   const list = getSaves();
   list.unshift(entry);
@@ -1631,7 +1748,6 @@ function restoreSave(id){
     if (entry.meta) localStorage.setItem(META_KEY, entry.meta);
     if (entry.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, entry.descTemplate);
     if (entry.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, entry.seuilsCT);
-    if (entry.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, entry.envBalance);
     Object.entries(entry.months || {}).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e){}
   location.reload();
@@ -1904,7 +2020,6 @@ function importHtmlBackup(){
         if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
         if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
         if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
-        if (payload.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, payload.envBalance);
         Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
       } catch(e){}
       location.reload();
@@ -1929,7 +2044,6 @@ function trySeedFromEmbeddedData(){
     if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
     if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
     if (payload.seuilsCT) localStorage.setItem(SEUILS_CT_KEY, payload.seuilsCT);
-    if (payload.envBalance) localStorage.setItem(ENVELOPE_BALANCE_KEY, payload.envBalance);
     Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
   } catch(e){}
 }
@@ -1971,7 +2085,7 @@ function saveState(){
   });
   try { localStorage.setItem(DATA_PREFIX+currentMonth, JSON.stringify(data)); } catch(e){ /* storage full or unavailable */ }
   saveDescTemplate();
-  saveEnvelopeBalanceTemplate();
+  if (window.__syncToCloud) window.__syncToCloud();
 }
 
 function loadState(){
@@ -2012,6 +2126,8 @@ document.addEventListener('input', e=>{
   }
   const table = e.target.closest('table.budget-table');
   if (table){
+    // renommer/saisir une enveloppe change le solde à reporter : on le réévalue aussitôt
+    if (table.id === 'tbl-epargne-ct' && e.target.matches('.desc-in')) applyEnvelopeCarryForward();
     recalcTable(table.id);
     updateDerived();
     saveState();
@@ -2022,6 +2138,7 @@ document.addEventListener('click', e=>{
   const addBtn = e.target.closest('.add-row-btn');
   if (addBtn){
     addRow(addBtn.dataset.table);
+    if (addBtn.dataset.table === 'tbl-epargne-ct') applyEnvelopeCarryForward();
     recalcTable(addBtn.dataset.table);
     saveState();
     return;
@@ -2134,14 +2251,15 @@ document.getElementById('seuilCTHaut').addEventListener('input', ()=>{
   updateSeuilLabels(); saveSeuilsCT(); recalcTable('tbl-epargne-ct');
 });
 
-/* offline support (PWA): only meaningful on the hosted https version — silently
-   does nothing when this file is opened locally (file://) */
-/* Self-healing updates: without this, someone whose browser already has an older
-   service worker/cache installed (e.g. from before a fix) can stay stuck on stale
-   code indefinitely, with no way for them to notice or clear it themselves. So on
-   every load we force an immediate check for a newer sw.js (reg.update(), instead
-   of waiting for the browser's own ~24h heuristic), and the moment a new version
-   actually takes control, the page reloads itself once, automatically. */
+/* No service worker / offline cache here on purpose: this app requires a live connection
+   to Supabase to do anything useful anyway, so there's no benefit to offline caching —
+   and skipping it entirely avoids the whole "stuck on a stale cached version" bug class
+   that the localStorage-only tool needed a lot of work to deal with. Every load of this
+   page always fetches fresh straight from GitHub Pages, no extra plumbing required. */
+
+/* Service worker : il sert uniquement à rendre l'application installable (icône sur l'écran
+   d'accueil) et à ce qu'une nouvelle version prenne la main toute seule. Il ne met plus RIEN en
+   cache — les données vivent dans le compte en ligne, donc plus aucun risque de version périmée. */
 if ('serviceWorker' in navigator && location.protocol === 'https:'){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
@@ -2175,6 +2293,300 @@ function showUpdateBanner(){
   document.body.appendChild(bar);
   setTimeout(() => { bar.style.transition = 'opacity .6s'; bar.style.opacity = '0'; setTimeout(() => bar.remove(), 700); }, 4000);
 }
+
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+(function(){
+"use strict";
+
+const SUPABASE_URL = "https://bguglfxfjzsgaojcfdcl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_jIyYksWZdWcDFUZCVlAl7w_ldfEs89N";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Local-first, cloud-mirrored: the existing app above still reads/writes localStorage exactly
+   as before (untouched) — this script only (1) shows/hides the login gate vs the app, (2) once
+   logged in, pulls this user's data from Supabase into localStorage ONCE per session then does
+   a single reload so the app's own (unmodified) init runs against fresh data, and (3) pushes to
+   Supabase in the background whenever saveState() runs (via the window.__syncToCloud hook it
+   calls if present — see the one line added at the end of saveState() above). */
+
+const LS_META = "budgetSegala_meta_v1";
+const LS_MONTH_PREFIX = "budgetSegala_month_v1_";
+const LS_SAVES = "budgetSegala_saves_v1";
+const LS_DESC_TEMPLATE = "budgetSegala_descTemplate_v1";
+const LS_SEUILS_CT = "budgetSegala_seuilsCT_v1";
+
+function safeParse(raw, fallback){
+  if (!raw) return fallback;
+  try { return JSON.parse(raw); } catch(e){ return fallback; }
+}
+
+let currentUser = null;
+let syncTimer = null;
+
+/* Les mois modifiés depuis le dernier envoi. Indispensable : si elle tape une valeur puis change
+   de mois dans la seconde qui suit, l'envoi différé ne doit pas se tromper de mois. */
+const dirtyMonths = new Set();
+
+function showMessage(text, isError){
+  const el = document.getElementById('authMessage');
+  el.textContent = text;
+  el.className = isError ? 'error' : 'ok';
+}
+
+function setSyncState(text){
+  const el = document.getElementById('syncState');
+  if (el) el.textContent = text;
+}
+
+function localMonthKeys(){
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf(LS_MONTH_PREFIX) === 0) out.push(k.slice(LS_MONTH_PREFIX.length));
+    }
+  } catch(e){}
+  return out;
+}
+
+async function pullFromCloud(user){
+  const { data: settingsRow } = await supabase.from('budget_settings').select('*').eq('user_id', user.id).maybeSingle();
+  if (settingsRow){
+    if (settingsRow.meta) localStorage.setItem(LS_META, JSON.stringify(settingsRow.meta));
+    if (settingsRow.desc_template) localStorage.setItem(LS_DESC_TEMPLATE, JSON.stringify(settingsRow.desc_template));
+    if (settingsRow.seuils_ct) localStorage.setItem(LS_SEUILS_CT, JSON.stringify(settingsRow.seuils_ct));
+    if (settingsRow.saves) localStorage.setItem(LS_SAVES, JSON.stringify(settingsRow.saves));
+  }
+  const { data: monthRows } = await supabase.from('budget_months').select('*').eq('user_id', user.id);
+  (monthRows || []).forEach(row => {
+    localStorage.setItem(LS_MONTH_PREFIX + row.month_key, JSON.stringify(row.data));
+  });
+}
+
+async function pushSettings(user){
+  const { error } = await supabase.from('budget_settings').upsert({
+    user_id: user.id,
+    meta: safeParse(localStorage.getItem(LS_META), {}),
+    desc_template: safeParse(localStorage.getItem(LS_DESC_TEMPLATE), {}),
+    seuils_ct: safeParse(localStorage.getItem(LS_SEUILS_CT), {}),
+    saves: safeParse(localStorage.getItem(LS_SAVES), []),
+    updated_at: new Date().toISOString()
+  });
+  if (error) throw error;
+}
+
+/* Première rencontre entre cet appareil et le compte.
+   Règle absolue : on n'écrase JAMAIS rien. Tout mois présent sur l'appareil mais absent du
+   compte est envoyé ; seulement ensuite on redescend le compte. C'est ce qui permet de
+   reprendre un carnet déjà rempli sans compte — le cas de Maman — sans aucun export/import
+   de fichier : elle ouvre la même adresse qu'avant, crée son compte, et tout monte tout seul. */
+async function uploadMonthsMissingFromCloud(user){
+  const { data: cloudRows, error } = await supabase
+    .from('budget_months').select('month_key').eq('user_id', user.id);
+  if (error) throw error;
+  const cloudKeys = new Set((cloudRows || []).map(r => r.month_key));
+
+  const rows = [];
+  localMonthKeys().forEach(mk => {
+    if (cloudKeys.has(mk)) return;
+    const data = safeParse(localStorage.getItem(LS_MONTH_PREFIX + mk), null);
+    if (data) rows.push({ user_id: user.id, month_key: mk, data, updated_at: new Date().toISOString() });
+  });
+  if (rows.length){
+    const { error: upErr } = await supabase.from('budget_months')
+      .upsert(rows, { onConflict: 'user_id,month_key' });
+    if (upErr) throw upErr;
+  }
+
+  // Les réglages ne montent que si le compte n'en a pas encore : sinon le compte fait foi.
+  const { data: settingsRow } = await supabase.from('budget_settings')
+    .select('user_id').eq('user_id', user.id).maybeSingle();
+  if (!settingsRow) await pushSettings(user);
+
+  return rows.length;
+}
+
+async function pushToCloud(){
+  const user = currentUser;
+  if (!user) return;
+  const months = [...dirtyMonths];
+  dirtyMonths.clear();
+  try {
+    await pushSettings(user);
+    const rows = [];
+    months.forEach(mk => {
+      const data = safeParse(localStorage.getItem(LS_MONTH_PREFIX + mk), null);
+      if (data) rows.push({ user_id: user.id, month_key: mk, data, updated_at: new Date().toISOString() });
+    });
+    if (rows.length){
+      const { error } = await supabase.from('budget_months')
+        .upsert(rows, { onConflict: 'user_id,month_key' });
+      if (error) throw error;
+    }
+    setSyncState('✓ sauvegardé en ligne');
+  } catch(e){
+    months.forEach(mk => dirtyMonths.add(mk)); // rien n'est perdu : on réessaiera à la prochaine saisie
+    setSyncState('⚠ sauvegarde en attente');
+    console.warn('Synchronisation Supabase échouée :', e);
+  }
+}
+
+function scheduleSyncToCloud(){
+  const meta = safeParse(localStorage.getItem(LS_META), {});
+  if (meta.currentMonth) dirtyMonths.add(meta.currentMonth);
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushToCloud, 800);
+}
+
+function showBanner(text, color){
+  const bar = document.createElement('div');
+  bar.textContent = text;
+  bar.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:999; background:' + color
+    + '; color:#fff; text-align:center; padding:10px 14px; font-family:Georgia,serif;'
+    + ' font-size:.95em; box-shadow:0 2px 8px rgba(0,0,0,.25);';
+  document.body.appendChild(bar);
+  setTimeout(() => { bar.style.transition = 'opacity .6s'; bar.style.opacity = '0'; setTimeout(() => bar.remove(), 700); }, 6000);
+}
+
+let authBootstrapping = false;
+
+/* onAuthStateChange ET getSession se déclenchent tous les deux à l'ouverture : sans ce verrou,
+   la toute première connexion lancerait deux migrations et deux rechargements en parallèle. */
+async function handleAuthed(user){
+  if (authBootstrapping) return;
+  authBootstrapping = true;
+  try { await bootstrapSession(user); } finally { authBootstrapping = false; }
+}
+
+async function bootstrapSession(user){
+  currentUser = user;
+  window.__syncToCloud = scheduleSyncToCloud;
+  document.getElementById('loggedInAs').textContent = user.email;
+
+  const pulledKey = 'pulledFor_' + user.id;
+  if (!sessionStorage.getItem(pulledKey)){
+    try {
+      const uploaded = await uploadMonthsMissingFromCloud(user);
+      await pullFromCloud(user);
+      if (uploaded) sessionStorage.setItem('justMigrated', String(uploaded));
+    } catch(e){ console.warn('Synchronisation initiale échouée :', e); }
+    sessionStorage.setItem(pulledKey, '1');
+    location.reload();
+    return;
+  }
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  setSyncState('✓ sauvegardé en ligne');
+
+  try {
+    const migrated = sessionStorage.getItem('justMigrated');
+    if (migrated){
+      sessionStorage.removeItem('justMigrated');
+      showBanner('✓ ' + migrated + ' mois de ton carnet ont été sauvegardés dans ton compte.', '#2a7a4f');
+    }
+  } catch(e){}
+}
+
+function handleLoggedOut(){
+  currentUser = null;
+  window.__syncToCloud = null;
+  document.getElementById('authGate').style.display = 'flex';
+  document.getElementById('appContent').style.display = 'none';
+}
+
+document.getElementById('authSignupBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password){ showMessage('Renseigne un email et un mot de passe.', true); return; }
+  showMessage('Inscription en cours...', false);
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error){ showMessage(error.message, true); return; }
+  showMessage(data.session ? 'Compte créé !' : 'Compte créé ! Vérifie ta boîte mail pour confirmer, puis connecte-toi.', false);
+});
+
+document.getElementById('authLoginBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password){ showMessage('Renseigne un email et un mot de passe.', true); return; }
+  showMessage('Connexion en cours...', false);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error){ showMessage(error.message, true); return; }
+  showMessage('', false);
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  if (currentUser) sessionStorage.removeItem('pulledFor_' + currentUser.id);
+  await supabase.auth.signOut();
+  location.reload();
+});
+
+/* One-time migration: reads a backup .html exported from the old localStorage-only tool
+   (via its "⬇️ Télécharger une sauvegarde de secours" button) and pushes everything straight
+   into this account's Supabase rows — so switching to the account-based version never means
+   retyping data by hand. Reuses the very same "__seed_data__" embedding the old tool already
+   produces; just uploads to Supabase instead of writing to localStorage. */
+document.getElementById('importOldBtn').addEventListener('click', ()=>{
+  if (!currentUser){ alert('Connecte-toi d\'abord.'); return; }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.html,text/html';
+  input.addEventListener('change', ()=>{
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async ()=>{
+      const text = String(reader.result);
+      const match = text.match(/<script[^>]*id=["']__seed_data__["'][^>]*>([\s\S]*?)<\/script>/);
+      if (!match){ alert('Ce fichier ne contient pas de sauvegarde reconnaissable.'); return; }
+      let payload;
+      try { payload = JSON.parse(match[1]); } catch(e){ alert('Cette sauvegarde est illisible.'); return; }
+      if (!payload || !payload.months){ alert('Cette sauvegarde est illisible.'); return; }
+      const monthCount = Object.keys(payload.months).length;
+      if (!confirm(`Importer ${monthCount} mois depuis cette sauvegarde ? Ça remplacera les données déjà présentes sur ce compte pour les mêmes mois.`)) return;
+
+      try {
+        await supabase.from('budget_settings').upsert({
+          user_id: currentUser.id,
+          meta: safeParse(payload.meta, {}),
+          desc_template: safeParse(payload.descTemplate, {}),
+          seuils_ct: safeParse(payload.seuilsCT, {}),
+          saves: safeParse(payload.saves, []),
+          updated_at: new Date().toISOString()
+        });
+
+        const entries = Object.entries(payload.months || {});
+        for (const [key, rawJson] of entries){
+          const monthKey = key.replace(LS_MONTH_PREFIX, '');
+          await supabase.from('budget_months').upsert({
+            user_id: currentUser.id,
+            month_key: monthKey,
+            data: safeParse(rawJson, {}),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,month_key' });
+        }
+
+        alert('Import terminé ! La page va se recharger avec tes données.');
+        sessionStorage.removeItem('pulledFor_' + currentUser.id);
+        location.reload();
+      } catch(e){
+        alert('L\'import a échoué : ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+  input.click();
+});
+
+supabase.auth.onAuthStateChange((event, session)=>{
+  if (session && session.user) handleAuthed(session.user); else handleLoggedOut();
+});
+supabase.auth.getSession().then(({ data })=>{
+  if (data.session && data.session.user) handleAuthed(data.session.user); else handleLoggedOut();
+});
 
 })();
 </script>
