@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (9)";
+const BUILD_VERSION = "2026-09-17 (10)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1734,6 +1734,12 @@ function applyDescriptions(tpl){
       if (!tr || !rowData.desc) return;
       const descEl = tr.querySelector('.desc-in');
       if (!descEl || descEl.value.trim()) return;      // ne jamais écraser une saisie
+      /* Et surtout : ne jamais coller un libellé sur une ligne qui porte DÉJÀ des montants.
+         Une ligne sans libellé mais avec des chiffres est un vestige (une description effacée
+         en laissant les montants), pas un emplacement libre. La baptiser reviendrait à faire
+         adopter à une catégorie les chiffres d'une autre — c'est ce qui faisait passer un
+         objectif de 6000 à 2000 d'un mois sur l'autre, sans rien avoir touché. */
+      if (rowHasFigures(tr, descEl)) return;
       const key = normDesc(rowData.desc);
       if (dejaPresent.has(key)) return;                // déjà présente ailleurs dans le tableau
       descEl.value = rowData.desc;
