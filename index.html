@@ -674,7 +674,7 @@ footer{
   </div>
 </div>
 
-<footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓</footer>
+<footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.7em; opacity:.6;"></span></footer>
 
 <script>
 /* jsPDF v2.5.1 - MIT License - https://github.com/parallax/jsPDF */
@@ -1100,6 +1100,9 @@ const DATA_PREFIX = "budgetSegala_month_v1_";
 const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 const SEUILS_CT_KEY = "budgetSegala_seuilsCT_v1";
+/* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
+   so anyone can visually confirm which version they're on without opening devtools. */
+const BUILD_VERSION = "2026-09-17";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -2086,13 +2089,27 @@ document.getElementById('nextMonthBtn').addEventListener('click', ()=> goToMonth
 document.getElementById('nextYearBtn').addEventListener('click', ()=> goToMonth(addMonthsToKey(currentMonth, 12)));
 document.getElementById('firstMonthBtn').addEventListener('click', ()=> goToMonth(firstMonth));
 
-function onMonthYearSelectChange(){
+/* The month dropdown and year dropdown are otherwise fully independent (deliberately, so any
+   exact month+year can be picked, e.g. to review history). But that means picking "Janvier"
+   while the year still reads e.g. "2026" (left over from "Décembre 2026") literally means
+   Janvier 2026, not the "next" Janvier she meant — a natural, very likely typo of intent.
+   So: only when the MONTH dropdown itself is what changed, and the newly picked month number
+   is lower than the month we're leaving (i.e. it wrapped past a year boundary), bump the year
+   dropdown forward by one automatically. Changing the YEAR dropdown itself is never touched by
+   this — that one stays a fully deliberate, independent jump. */
+document.getElementById('monthSelect').addEventListener('change', ()=>{
+  const { m: oldM } = parseMonthKey(currentMonth); // 0-indexed month we're leaving
+  const newM = parseInt(document.getElementById('monthSelect').value, 10) - 1; // 0-indexed
+  let y = parseInt(document.getElementById('yearSelect').value, 10);
+  if (newM < oldM) y += 1;
+  document.getElementById('yearSelect').value = String(y);
+  goToMonth(`${y}-${pad2(newM + 1)}`);
+});
+document.getElementById('yearSelect').addEventListener('change', ()=>{
   const m = document.getElementById('monthSelect').value;
   const y = document.getElementById('yearSelect').value;
   goToMonth(`${y}-${m}`);
-}
-document.getElementById('monthSelect').addEventListener('change', onMonthYearSelectChange);
-document.getElementById('yearSelect').addEventListener('change', onMonthYearSelectChange);
+});
 
 /* ---------- init ---------- */
 trySeedFromEmbeddedData();
@@ -2135,8 +2152,28 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (swRefreshing) return;
     swRefreshing = true;
+    try { sessionStorage.setItem('justUpdated', '1'); } catch(e){}
     location.reload();
   });
+}
+
+/* visible proof a device is on the latest code — no devtools needed to check:
+   shown in the footer always, and as a dismissing banner right after an auto-update. */
+document.getElementById('buildVersionLabel').textContent = 'Version du ' + BUILD_VERSION;
+try {
+  if (sessionStorage.getItem('justUpdated') === '1'){
+    sessionStorage.removeItem('justUpdated');
+    showUpdateBanner();
+  }
+} catch(e){}
+
+function showUpdateBanner(){
+  const bar = document.createElement('div');
+  bar.textContent = '✓ Mise à jour appliquée — tu utilises la toute dernière version (' + BUILD_VERSION + ')';
+  bar.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:999; background:#2a7a4f; color:#fff;'
+    + 'text-align:center; padding:10px 14px; font-family:Georgia,serif; font-size:.95em; box-shadow:0 2px 8px rgba(0,0,0,.25);';
+  document.body.appendChild(bar);
+  setTimeout(() => { bar.style.transition = 'opacity .6s'; bar.style.opacity = '0'; setTimeout(() => bar.remove(), 700); }, 4000);
 }
 
 })();
