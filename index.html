@@ -1173,7 +1173,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-17 (11)";
+const BUILD_VERSION = "2026-09-18";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1922,7 +1922,20 @@ function previousEnvelopeBalances(beforeMonthKey){
     }
   } catch(e){ return result; }
 
-  earlierMonths.sort().reverse(); // du plus récent au plus ancien
+  /* Du plus ANCIEN au plus récent : on rejoue tout l'historique de l'enveloppe.
+
+     La version précédente faisait l'inverse — elle prenait le mois le plus récent et relisait
+     son « Déjà épargné » enregistré. Or ce montant est lui-même un report : il n'est recalculé
+     que lorsqu'on ouvre ce mois-là. Saisir un retrait en septembre puis sauter directement à
+     novembre laissait donc novembre sur la valeur d'octobre calculée AVANT le retrait, qui
+     n'était donc jamais déduit. Le résultat dépendait des mois qu'on avait pris la peine de
+     rouvrir, ce qui n'est pas acceptable pour un solde.
+
+     Désormais seul le tout premier mois de l'enveloppe fournit un socle — le montant de départ
+     saisi à la main. Ensuite on n'additionne plus que des MOUVEMENTS (dépôts moins retraits),
+     en ignorant les « Déjà épargné » enregistrés puisqu'ils sont dérivés. Corriger n'importe
+     quel mois se répercute aussitôt sur toute la suite. */
+  earlierMonths.sort();
 
   earlierMonths.forEach(mk => {
     let rows = [];
@@ -1932,15 +1945,16 @@ function previousEnvelopeBalances(beforeMonthKey){
     } catch(e){ return; }
 
     rows.forEach(rd => {
-      if (!rd || !rd.desc || !rd.desc.trim()) return;
+      if (!rd || !rd.desc || !String(rd.desc).trim()) return;
       const key = normDesc(rd.desc);
-      if (result[key] !== undefined) return; // un mois plus récent a déjà répondu
       if (mk < (sinceByEnvelope[key] || DAWN)) return; // antérieur à la création de l'enveloppe
       const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
                    || (rd.depot !== undefined && rd.depot !== '')
                    || (rd.retrait !== undefined && rd.retrait !== '');
-      if (!hasData) return;                  // mois sans mouvement : on remonte encore
-      result[key] = rowEndBalance(rd);
+      if (!hasData) return;                  // mois sans mouvement : le solde se propage tel quel
+      result[key] = (result[key] === undefined)
+        ? rowEndBalance(rd)                                   // socle : premier mois de l'enveloppe
+        : result[key] + num(rd.depot) - num(rd.retrait);      // ensuite : mouvements seuls
     });
   });
 
