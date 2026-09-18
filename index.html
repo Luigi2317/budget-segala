@@ -1216,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (12)";
+const BUILD_VERSION = "2026-09-18 (13)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1529,7 +1529,7 @@ let currentMonth, firstMonth;
    retrouvait estampillée « réparée » alors que ses mois étaient restés anciens — et la
    réparation ne se redéclenchait plus jamais. Incrémenter la version est la seule façon de
    rattraper les comptes déjà marqués à tort. */
-const DATA_VERSION = 4;
+const DATA_VERSION = 5;
 let dataVersion = 0;
 
 function saveMeta(){
@@ -1544,7 +1544,9 @@ function migrerDonnees(){
      v3 : même réparation, rejouée pour les comptes que la v2 avait marqués sans les corriger
           en ligne. Elle est sans effet là où tout est déjà juste, donc sans risque.
      v4 : étiqueter d'abord chaque solde ancien — calculé ou saisi — pour ne plus dépendre
-          des décimales, que certaines tablettes suppriment. */
+          des décimales, que certaines tablettes suppriment.
+     v5 : ré-étiqueter selon la seule règle qui tienne — premier mois saisi, suivants calculés.
+          Les v4 s'appuyaient sur des indices ; certains carnets en sont restés figés. */
   marquerSoldesLegacy();
   const bilan = recalculerTousLesMois();
 
@@ -1785,6 +1787,16 @@ function updateDescTemplate(mode){
         } else {
           return;
         }
+      } else if (monthKey < (e.since || DAWN)){
+        /* La ligne est saisie dans un mois ANTÉRIEUR au début déclaré de l'enveloppe : c'est
+           qu'elle existait déjà là, et son début recule d'autant. Sans cela, saisir des
+           montants dans un mois plus ancien ne servait à rien — ils restaient hors du
+           périmètre de l'enveloppe, donc invisibles pour le report, en silence.
+           Réservé au geste explicite : une simple visite ne doit jamais rallonger la vie
+           d'une enveloppe, sinon consulter un vieux mois ressusciterait celles qu'on a
+           volontairement fait repartir de zéro. */
+        if (!isGeste) return;
+        e.since = monthKey;
       } else if (!isActiveAt(e, monthKey)){
         return; // entrée d'un futur qu'on n'a pas encore atteint : on la laisse tranquille
       }
@@ -2125,17 +2137,18 @@ function moisEnregistresTries(){
   return out;
 }
 
-/* Étiquette une bonne fois pour toutes les soldes des carnets antérieurs au marqueur.
+/* Étiquette les soldes de tout le carnet, selon UNE règle et une seule :
 
-   Le problème à résoudre : sur certaines tablettes, le champ numérique rabote les décimales.
-   Un solde calculé, écrit « 1450.00 », est relu « 1450 » — et prend alors l'apparence d'un
-   montant saisi à la main, donc intouchable. Les vraies saisies, elles, n'ont jamais eu de
-   décimales non plus. Impossible de les distinguer sur le seul format du nombre.
+       le premier mois d'une enveloppe porte un montant saisi ;
+       tous les mois suivants sont calculés.
 
-   La sortie est de demander au MOIS SUIVANT de trancher. Si le solde qu'il porte correspond
-   à ce que donnerait ce mois-ci une fois CALCULÉ, alors ce mois-ci était bien un calcul, et
-   la ressemblance avec une saisie n'était qu'un artefact d'affichage. Sinon, on considère
-   que c'est une saisie et on n'y touche pas : dans le doute, la saisie l'emporte toujours. */
+   Le modèle dit où commence chaque enveloppe (son « since »). Il n'y a donc rien à deviner,
+   et c'est tout l'intérêt : les versions précédentes essayaient de reconnaître une saisie
+   tantôt au format du nombre — ce qui dépend de l'appareil, certaines tablettes rabotant les
+   décimales — tantôt en demandant au mois suivant de corroborer, ce qui échouait dès qu'un
+   montant avait été modifié entre-temps. Chaque échec figeait une case erronée en la prenant
+   pour une saisie, donc en la rendant intouchable. Empiler des indices ne remplace pas une
+   règle : celle-ci est déterministe, et elle se relit. */
 function marquerSoldesLegacy(){
   const mois = moisEnregistresTries();
   const parEnveloppe = {};
@@ -2156,34 +2169,11 @@ function marquerSoldesLegacy(){
 
   Object.keys(parEnveloppe).forEach(key => {
     const suite = parEnveloppe[key].filter(e => e.mk >= (since[key] || DAWN));
-    let solde;
     suite.forEach((e, i) => {
-      const rd = e.rd;
-      if (solde === undefined){                       // premier mois : c'est une saisie
-        if (rd.startAuto === undefined){ rd.startAuto = false; touches.add(e.mois); }
-        solde = rowEndBalance(rd);
-        return;
-      }
-      if (rd.startAuto !== undefined){                // déjà étiqueté : on respecte
-        solde = estUnNouveauSocle(rd, solde) ? rowEndBalance(rd)
-                                             : solde + num(rd.depot) - num(rd.retrait);
-        return;
-      }
-      const finSiCalcule = solde + num(rd.depot) - num(rd.retrait);
-      if (!estUnNouveauSocle(rd, solde)){             // sans ambiguïté : c'est un calcul
-        rd.startAuto = true; touches.add(e.mois);
-        solde = finSiCalcule;
-        return;
-      }
-      // Ambigu. Le mois suivant tranche.
-      const finSiSaisi = num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
-      const suivant = suite[i + 1];
-      const corrobore = suivant
-        && Math.abs(num(suivant.rd.startBalance) - finSiCalcule) < 0.005
-        && Math.abs(num(suivant.rd.startBalance) - finSiSaisi) > 0.005;
-      rd.startAuto = !!corrobore;
+      const calcule = (i > 0);          // le rang suffit : premier = saisi, ensuite = calculé
+      if (e.rd.startAuto === calcule) return;
+      e.rd.startAuto = calcule;
       touches.add(e.mois);
-      solde = corrobore ? finSiCalcule : finSiSaisi;
     });
   });
 
