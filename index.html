@@ -71,6 +71,24 @@ header.hero{
 }
 .month-nav button:hover:not(:disabled){background:var(--navy); color:#fff;}
 .month-nav button:disabled{opacity:.4; cursor:default;}
+/* Bandeau d'état du mois. Un mois seulement consulté n'existe pas encore : tant qu'on ne
+   l'a pas activé, aucun report n'y est appliqué et il ne pèse pas dans les soldes. */
+.mois-statut{
+  display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap;
+  margin:10px auto 2px; max-width:720px; padding:9px 16px; border-radius:12px;
+  font-family:Georgia,serif; font-size:.88em;
+}
+.mois-statut button{
+  border-radius:20px; padding:6px 14px; cursor:pointer; font-family:inherit; font-size:.95em;
+  white-space:nowrap;
+}
+.mois-inactif{ background:#fdf3d7; border:1px solid #c9a227; color:#6b4e00; }
+.mois-inactif button{ background:#2a7a4f; border:1px solid #1f5c3b; color:#fff; font-weight:bold; }
+.mois-inactif button:hover{ background:#1f5c3b; }
+.mois-actif{ background:rgba(255,255,255,.5); color:var(--navy); font-size:.78em; opacity:.85; }
+.mois-actif button{ background:transparent; border:1px solid var(--sea); color:var(--navy); font-size:.92em; }
+.mois-actif button:hover{ background:var(--sea); color:#fff; }
+
 .toolbar{display:flex; gap:8px; justify-content:center; margin:10px 0 4px; flex-wrap:wrap;}
 .toolbar button{
   background:var(--paper); border:1px solid var(--navy); color:var(--navy);
@@ -387,6 +405,14 @@ footer{
       <select id="yearSelect" title="Choisir l'année"></select>
       <button type="button" id="nextMonthBtn" title="Mois suivant">▶</button>
       <button type="button" id="nextYearBtn" title="Avancer d'un an">Année suivante ▶▶</button>
+    </div>
+    <div id="moisInactifBar" class="mois-statut mois-inactif" style="display:none;">
+      <span class="mois-statut-texte">Ce mois n'est pas encore activé : les reports ne sont pas appliqués et il ne compte pas dans tes épargnes.</span>
+      <button type="button" id="activerMoisBtn">✅ Activer ce mois</button>
+    </div>
+    <div id="moisActifBar" class="mois-statut mois-actif" style="display:none;">
+      <span class="mois-statut-texte">Mois activé.</span>
+      <button type="button" id="desactiverMoisBtn" title="Le mois est retiré des calculs d'épargne et de la liste des mois enregistrés.">Retirer ce mois des calculs</button>
     </div>
     <div class="toolbar">
       <button type="button" onclick="window.print()">🖨️ Imprimer</button>
@@ -1190,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (5)";
+const BUILD_VERSION = "2026-09-18 (7)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1807,9 +1833,10 @@ function loadDescTemplate(){
   return tpl;
 }
 
-function applyDescriptions(tpl){
+function applyDescriptions(tpl, options){
+  const sansValeurs = !!(options && options.sansValeurs);
   DESC_CARRY_TABLES.forEach(id=>{
-    const extraFields = STICKY_EXTRA_FIELDS[id] || [];
+    const extraFields = sansValeurs ? [] : (STICKY_EXTRA_FIELDS[id] || []);
     let rows = activeTemplateRows(tpl, id, currentMonth);
     /* Les libellés d'origine ne reviennent que si ce tableau n'a JAMAIS servi. Sans cette
        nuance, tout vider ferait réapparaître les catégories par défaut au mois suivant. */
@@ -1949,6 +1976,28 @@ function applyDescriptions(tpl){
    si vide" — sinon une valeur périmée survivrait à une correction faite en amont. */
 
 /* Solde de fin (= "Montant total") d'une ligne telle qu'elle est stockée dans un mois. */
+/* Un « Déjà épargné » écrit par l'application porte toujours deux décimales : il sort de
+   toFixed(2). Un montant tapé à la main sur une tablette n'en porte presque jamais.
+
+   Ce n'est pas une preuve, mais c'est le seul indice disponible sur les carnets remplis avant
+   que cette case ne devienne calculée — et entre écraser un montant que quelqu'un a saisi et
+   respecter une valeur peut-être périmée, le choix n'est pas discutable : on respecte la
+   saisie. Elle redevient alors le point de départ de la suite, comme le premier mois d'une
+   enveloppe. Sans cette règle, rejouer l'historique depuis le tout premier mois enregistré
+   réécrivait des soldes que l'utilisatrice avait délibérément corrigés. */
+function ressembleASaisieManuelle(v){
+  if (v === undefined || v === null) return false;
+  const t = String(v).trim();
+  if (t === '') return false;
+  return !/^-?\d+\.\d{2}$/.test(t);
+}
+
+/* Ce mois reprend-il la main sur le solde courant ? */
+function estUnNouveauSocle(rd, soldeCourant){
+  return ressembleASaisieManuelle(rd.startBalance)
+      && Math.abs(num(rd.startBalance) - soldeCourant) > 0.005;
+}
+
 function rowEndBalance(rd){
   return num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
 }
@@ -2011,9 +2060,11 @@ function previousEnvelopeBalances(beforeMonthKey){
                    || (rd.depot !== undefined && rd.depot !== '')
                    || (rd.retrait !== undefined && rd.retrait !== '');
       if (!hasData) return;                  // mois sans mouvement : le solde se propage tel quel
-      result[key] = (result[key] === undefined)
-        ? rowEndBalance(rd)                                   // socle : premier mois de l'enveloppe
-        : result[key] + num(rd.depot) - num(rd.retrait);      // ensuite : mouvements seuls
+      if (result[key] === undefined || estUnNouveauSocle(rd, result[key])){
+        result[key] = rowEndBalance(rd);                      // socle : premier mois, ou reprise en main
+      } else {
+        result[key] = result[key] + num(rd.depot) - num(rd.retrait);   // sinon : mouvements seuls
+      }
     });
   });
 
@@ -2075,8 +2126,8 @@ function recalculerTousLesMois(){
                    || (rd.retrait !== undefined && rd.retrait !== '');
       if (!hasData) return;
 
-      if (solde[key] === undefined){
-        // premier mois de l'enveloppe : son montant de départ est une saisie, on n'y touche pas
+      if (solde[key] === undefined || estUnNouveauSocle(rd, solde[key])){
+        // premier mois de l'enveloppe, ou mois où elle a repris la main : c'est une saisie
         solde[key] = rowEndBalance(rd);
         return;
       }
@@ -2105,10 +2156,17 @@ function rafraichirMoisAffiche(){
   resetFormBlank();
   loadState();
   saveDescTemplate('decouverte');
-  applyDescriptions(loadDescTemplate());
-  applyEnvelopeCarryForward();
-  saveState();
+  const actif = moisEstActif();
+  /* Sur un mois non activé on montre la liste des lignes, pour qu'on voie de quoi il aurait
+     l'air — mais aucun chiffre reporté : ni les soldes d'épargne, ni les dépôts habituels.
+     Rien n'est calculé, rien n'est enregistré, le mois reste sans existence. */
+  applyDescriptions(loadDescTemplate(), { sansValeurs: !actif });
+  if (actif){
+    applyEnvelopeCarryForward();
+    saveState({ sansCreer: true });
+  }
   recalcAll();
+  majBandeauMois();
 }
 
 function applyEnvelopeCarryForward(){
@@ -2138,7 +2196,7 @@ function applyEnvelopeCarryForward(){
 function goToMonth(newKey){
   if (newKey === currentMonth) return;
   saveDescTemplate('decouverte');
-  saveState();
+  saveState({ sansCreer: true });
   currentMonth = newKey;
   saveMeta();
   /* rafraichirMoisAffiche recense ce que ce mois contient déjà AVANT que applyDescriptions ne
@@ -2521,7 +2579,31 @@ function restoreRow(tr, rd){
   if (chk && rd.check!==undefined) chk.checked = rd.check;
 }
 
-function saveState(){
+/* Un mois « existe » dès lors qu'il est enregistré. Le consulter ne suffit pas. */
+function moisEstActif(mk){
+  try { return localStorage.getItem(DATA_PREFIX + (mk || currentMonth)) !== null; }
+  catch(e){ return false; }
+}
+
+function majBandeauMois(){
+  const actif = moisEstActif();
+  const inactifEl = document.getElementById('moisInactifBar');
+  const actifEl = document.getElementById('moisActifBar');
+  if (inactifEl) inactifEl.style.display = actif ? 'none' : 'flex';
+  if (actifEl) actifEl.style.display = actif ? 'flex' : 'none';
+}
+
+/* Enregistre le mois affiché.
+
+   { sansCreer:true } réserve l'écriture aux mois déjà activés. Cette option est passée par
+   tout ce qui n'est pas une saisie : l'ouverture de l'application et le changement de mois.
+
+   Sans elle, se promener dans le calendrier suffisait à créer les mois traversés, avec les
+   descriptions du modèle et le dépôt reporté déjà en place. Un simple coup d'œil à janvier
+   2029 y inscrivait un dépôt jamais effectué, que le report d'épargne comptait ensuite comme
+   réel. C'est ce qui a rempli des mois de 2027 à 2029 sans que personne n'y touche. */
+function saveState(options){
+  if (options && options.sansCreer && !moisEstActif()) return;
   const data = { tables:{}, standalone:{} };
   ALL_TABLE_IDS.forEach(id=>{
     const tbody = document.getElementById(id).tBodies[0];
@@ -2532,6 +2614,7 @@ function saveState(){
   });
   try { localStorage.setItem(DATA_PREFIX+currentMonth, JSON.stringify(data)); } catch(e){ /* storage full or unavailable */ }
   saveDescTemplate();
+  majBandeauMois();
   if (window.__syncToCloud) window.__syncToCloud();
 }
 
@@ -2767,10 +2850,13 @@ const bilanMigration = migrerDonnees();
 buildDefaultRows();
 loadState();
 saveDescTemplate('decouverte');
-applyDescriptions(loadDescTemplate());
-applyEnvelopeCarryForward();
-saveState();
+applyDescriptions(loadDescTemplate(), { sansValeurs: !moisEstActif() });
+if (moisEstActif()){
+  applyEnvelopeCarryForward();
+  saveState({ sansCreer: true });
+}
 recalcAll();
+majBandeauMois();
 populateMonthYearSelects();
 updateMonthIndicator();
 
@@ -2806,6 +2892,49 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
 
 /* visible proof a device is on the latest code — no devtools needed to check:
    shown in the footer always, and as a dismissing banner right after an auto-update. */
+document.getElementById('activerMoisBtn').addEventListener('click', ()=>{
+  /* Activer un mois, c'est lui donner une existence : on y applique les reports et on
+     l'enregistre. Il entre alors dans le calcul des soldes des mois suivants. */
+  applyDescriptions(loadDescTemplate());
+  applyEnvelopeCarryForward();
+  saveState();
+  recalcAll();
+  majBandeauMois();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+document.getElementById('desactiverMoisBtn').addEventListener('click', ()=>{
+  const nb = compterSaisiesDuMois();
+  const message = nb
+    ? 'Ce mois contient ' + nb + ' valeur' + (nb > 1 ? 's' : '') + ' saisie' + (nb > 1 ? 's' : '') + '.\n\n'
+      + 'Le retirer des calculs les effacera, et les soldes des mois suivants seront recalculés '
+      + 'sans lui.\n\nContinuer ?'
+    : 'Retirer ce mois des calculs ? Il redeviendra un mois vierge, simplement consultable.';
+  if (!confirm(message)) return;
+  try { localStorage.removeItem(DATA_PREFIX + currentMonth); } catch(e){}
+  if (window.__supprimerMoisEnLigne) window.__supprimerMoisEnLigne(currentMonth);
+  rafraichirMoisAffiche();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+/* Combien de valeurs ont réellement été saisies dans le mois affiché — les libellés et les
+   soldes calculés ne comptent pas, seuls les montants entrés à la main. */
+function compterSaisiesDuMois(){
+  let n = 0;
+  ALL_TABLE_IDS.forEach(id=>{
+    const tbody = document.getElementById(id).tBodies[0];
+    [...tbody.rows].forEach(tr=>{
+      const descEl = tr.querySelector('.desc-in');
+      [...tr.querySelectorAll('input')].forEach(inp=>{
+        if (inp === descEl) return;
+        if (inp.classList.contains('start-balance-in') && inp.readOnly) return; // valeur reportée
+        if (inp.type === 'checkbox' ? inp.checked : inp.value.trim() !== '') n++;
+      });
+    });
+  });
+  return n;
+}
+
 document.getElementById('recalcAllMonthsBtn').addEventListener('click', ()=>{
   const r = recalculerTousLesMois();
   rafraichirMoisAffiche();
@@ -3036,6 +3165,14 @@ async function bootstrapSession(user){
   currentUser = user;
   window.__syncToCloud = scheduleSyncToCloud;
   window.__markMonthDirty = (mk) => { if (mk) dirtyMonths.add(mk); };
+  window.__supprimerMoisEnLigne = async (mk) => {
+    if (!currentUser || !mk) return;
+    dirtyMonths.delete(mk);
+    try {
+      await supabase.from('budget_months').delete()
+        .eq('user_id', currentUser.id).eq('month_key', mk);
+    } catch(e){ console.warn('Suppression du mois en ligne échouée :', e); }
+  };
   document.getElementById('loggedInAs').textContent = user.email;
 
   const pulledKey = 'pulledFor_' + user.id;
@@ -3076,6 +3213,7 @@ function handleLoggedOut(){
   currentUser = null;
   window.__syncToCloud = null;
   window.__markMonthDirty = null;
+  window.__supprimerMoisEnLigne = null;
   document.getElementById('authGate').style.display = 'flex';
   document.getElementById('appContent').style.display = 'none';
 }
