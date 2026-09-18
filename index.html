@@ -1216,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (9)";
+const BUILD_VERSION = "2026-09-18 (12)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1529,7 +1529,7 @@ let currentMonth, firstMonth;
    retrouvait estampillée « réparée » alors que ses mois étaient restés anciens — et la
    réparation ne se redéclenchait plus jamais. Incrémenter la version est la seule façon de
    rattraper les comptes déjà marqués à tort. */
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 let dataVersion = 0;
 
 function saveMeta(){
@@ -1542,7 +1542,10 @@ function migrerDonnees(){
 
   /* v2 : les soldes d'épargne enregistrés avant la refonte du report étaient figés.
      v3 : même réparation, rejouée pour les comptes que la v2 avait marqués sans les corriger
-          en ligne. Elle est sans effet là où tout est déjà juste, donc sans risque. */
+          en ligne. Elle est sans effet là où tout est déjà juste, donc sans risque.
+     v4 : étiqueter d'abord chaque solde ancien — calculé ou saisi — pour ne plus dépendre
+          des décimales, que certaines tablettes suppriment. */
+  marquerSoldesLegacy();
   const bilan = recalculerTousLesMois();
 
   dataVersion = DATA_VERSION;
@@ -2102,6 +2105,95 @@ function marquerMoisASynchroniser(mk){
   if (!mk) return;
   if (window.__markMonthDirty) window.__markMonthDirty(mk);
   if (window.__moisAReSynchroniser.indexOf(mk) === -1) window.__moisAReSynchroniser.push(mk);
+}
+
+/* Tous les mois enregistrés, du plus ancien au plus récent, avec leur contenu déjà analysé.
+   Renvoie [{ mk, data, rows }] — les objets sont modifiables et réenregistrables. */
+function moisEnregistresTries(){
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(DATA_PREFIX) !== 0) continue;
+      const mk = k.slice(DATA_PREFIX.length);
+      let data;
+      try { data = JSON.parse(localStorage.getItem(k) || '{}'); } catch(e){ continue; }
+      out.push({ mk, data, rows: (data.tables && data.tables['tbl-epargne-ct']) || [] });
+    }
+  } catch(e){}
+  out.sort((a, b) => a.mk < b.mk ? -1 : a.mk > b.mk ? 1 : 0);
+  return out;
+}
+
+/* Étiquette une bonne fois pour toutes les soldes des carnets antérieurs au marqueur.
+
+   Le problème à résoudre : sur certaines tablettes, le champ numérique rabote les décimales.
+   Un solde calculé, écrit « 1450.00 », est relu « 1450 » — et prend alors l'apparence d'un
+   montant saisi à la main, donc intouchable. Les vraies saisies, elles, n'ont jamais eu de
+   décimales non plus. Impossible de les distinguer sur le seul format du nombre.
+
+   La sortie est de demander au MOIS SUIVANT de trancher. Si le solde qu'il porte correspond
+   à ce que donnerait ce mois-ci une fois CALCULÉ, alors ce mois-ci était bien un calcul, et
+   la ressemblance avec une saisie n'était qu'un artefact d'affichage. Sinon, on considère
+   que c'est une saisie et on n'y touche pas : dans le doute, la saisie l'emporte toujours. */
+function marquerSoldesLegacy(){
+  const mois = moisEnregistresTries();
+  const parEnveloppe = {};
+  mois.forEach(m => {
+    m.rows.forEach(rd => {
+      if (!rd || !rd.desc || !String(rd.desc).trim()) return;
+      const key = normDesc(rd.desc);
+      const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
+                   || (rd.depot !== undefined && rd.depot !== '')
+                   || (rd.retrait !== undefined && rd.retrait !== '');
+      if (!hasData) return;
+      (parEnveloppe[key] || (parEnveloppe[key] = [])).push({ mk: m.mk, rd, mois: m });
+    });
+  });
+
+  const since = envelopeSinceMap();
+  const touches = new Set();
+
+  Object.keys(parEnveloppe).forEach(key => {
+    const suite = parEnveloppe[key].filter(e => e.mk >= (since[key] || DAWN));
+    let solde;
+    suite.forEach((e, i) => {
+      const rd = e.rd;
+      if (solde === undefined){                       // premier mois : c'est une saisie
+        if (rd.startAuto === undefined){ rd.startAuto = false; touches.add(e.mois); }
+        solde = rowEndBalance(rd);
+        return;
+      }
+      if (rd.startAuto !== undefined){                // déjà étiqueté : on respecte
+        solde = estUnNouveauSocle(rd, solde) ? rowEndBalance(rd)
+                                             : solde + num(rd.depot) - num(rd.retrait);
+        return;
+      }
+      const finSiCalcule = solde + num(rd.depot) - num(rd.retrait);
+      if (!estUnNouveauSocle(rd, solde)){             // sans ambiguïté : c'est un calcul
+        rd.startAuto = true; touches.add(e.mois);
+        solde = finSiCalcule;
+        return;
+      }
+      // Ambigu. Le mois suivant tranche.
+      const finSiSaisi = num(rd.startBalance) + num(rd.depot) - num(rd.retrait);
+      const suivant = suite[i + 1];
+      const corrobore = suivant
+        && Math.abs(num(suivant.rd.startBalance) - finSiCalcule) < 0.005
+        && Math.abs(num(suivant.rd.startBalance) - finSiSaisi) > 0.005;
+      rd.startAuto = !!corrobore;
+      touches.add(e.mois);
+      solde = corrobore ? finSiCalcule : finSiSaisi;
+    });
+  });
+
+  touches.forEach(m => {
+    try {
+      localStorage.setItem(DATA_PREFIX + m.mk, JSON.stringify(m.data));
+      marquerMoisASynchroniser(m.mk);
+    } catch(e){}
+  });
+  return touches.size;
 }
 
 function recalculerTousLesMois(){
@@ -2994,11 +3086,10 @@ document.getElementById('forceUpdateBtn').addEventListener('click', async ()=>{
       await Promise.all(regs.map(r => r.update().catch(()=>{})));
     }
   } catch(e){}
-  try { sessionStorage.setItem('justUpdated', '1'); } catch(e){}
   alert('Version actuelle : ' + avant + '\n\nLa page va se recharger pour récupérer la dernière '
       + 'version. Regarde la version affichée tout en bas après le rechargement : si elle a '
       + 'changé, la mise à jour est arrivée.\n\nAucune donnée n\'est touchée.');
-  location.reload();
+  rechargerSansCache();
 });
 
 document.getElementById('buildVersionLabel').textContent = 'Version du ' + BUILD_VERSION;
@@ -3011,6 +3102,79 @@ try {
 
 /* Bandeau discret annonçant une réparation automatique des données. Volontairement distinct
    du bandeau de mise à jour du code : ce ne sont pas les mêmes événements. */
+/* Une application laissée ouverte ne se met pas à jour toute seule.
+
+   Le service worker ne reprend la main que lorsque sw.js lui-même change ; or une correction
+   ne touche le plus souvent qu'index.html. Une tablette restée ouverte pendant des jours
+   continuait donc de faire tourner l'ancienne version — et surtout, elle continuait d'écrire
+   dans le compte avec l'ancienne logique, défaisant au passage les réparations.
+
+   On interroge donc le serveur de temps en temps, en demandant seulement les en-têtes du
+   fichier : c'est quelques octets, pas les trois mégaoctets de la page. Si la signature du
+   fichier a changé depuis l'ouverture, une nouvelle version existe. On ne recharge jamais
+   d'autorité — elle est peut-être en train de saisir — on propose. */
+/* Recharger vraiment, sans repasser par le cache du navigateur.
+
+   GitHub demande aux navigateurs de conserver la page dix minutes (Cache-Control: max-age=600).
+   Un simple location.reload() peut donc resservir l'ancienne version, même après avoir tout
+   fermé sur la tablette. En changeant l'adresse — on lui ajoute l'heure — le navigateur n'a
+   plus de copie correspondante et va forcément la chercher sur le serveur. L'adresse est
+   nettoyée juste après, pour qu'il n'en reste aucune trace. */
+function rechargerSansCache(){
+  try { sessionStorage.setItem('justUpdated', '1'); } catch(e){}
+  location.replace(location.pathname + '?maj=' + Date.now());
+}
+
+if (location.search.indexOf('maj=') !== -1){
+  try { history.replaceState(null, '', location.pathname); } catch(e){}
+}
+
+let signatureAuChargement = null;
+let bandeauVersionAffiche = false;
+
+async function signatureDuFichierEnLigne(){
+  try {
+    const r = await fetch('index.html', { method: 'HEAD', cache: 'no-store' });
+    if (!r.ok) return null;
+    return r.headers.get('etag') || r.headers.get('last-modified');
+  } catch(e){ return null; }
+}
+
+async function verifierNouvelleVersion(){
+  if (bandeauVersionAffiche) return;
+  const sig = await signatureDuFichierEnLigne();
+  if (!sig) return;
+  if (signatureAuChargement === null){ signatureAuChargement = sig; return; }
+  if (sig === signatureAuChargement) return;
+  bandeauVersionAffiche = true;
+  afficherBandeauNouvelleVersion();
+}
+
+function afficherBandeauNouvelleVersion(){
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:1000; background:#2a7a4f; color:#fff;'
+    + 'text-align:center; padding:11px 14px; font-family:Georgia,serif; font-size:.95em;'
+    + 'box-shadow:0 2px 8px rgba(0,0,0,.25); display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap;';
+  const texte = document.createElement('span');
+  texte.textContent = 'Une nouvelle version de l\'outil est disponible.';
+  const bouton = document.createElement('button');
+  bouton.type = 'button';
+  bouton.textContent = 'Recharger maintenant';
+  bouton.style.cssText = 'background:#fff; color:#2a7a4f; border:none; border-radius:20px;'
+    + 'padding:6px 16px; font-family:inherit; font-size:.95em; font-weight:bold; cursor:pointer;';
+  bouton.addEventListener('click', rechargerSansCache);
+  bar.appendChild(texte);
+  bar.appendChild(bouton);
+  document.body.appendChild(bar);
+}
+
+/* À l'ouverture, au retour sur l'application, et une fois par demi-heure. */
+verifierNouvelleVersion();
+document.addEventListener('visibilitychange', ()=>{
+  if (document.visibilityState === 'visible') verifierNouvelleVersion();
+});
+setInterval(verifierNouvelleVersion, 30 * 60 * 1000);
+
 function showDataBanner(text){
   const bar = document.createElement('div');
   bar.textContent = text;
