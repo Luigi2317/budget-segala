@@ -1216,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (13)";
+const BUILD_VERSION = "2026-09-18 (14)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1531,6 +1531,7 @@ let currentMonth, firstMonth;
    rattraper les comptes déjà marqués à tort. */
 const DATA_VERSION = 5;
 let dataVersion = 0;
+let carnetNeuf = false;   // vrai uniquement à la toute première ouverture d'un compte
 
 function saveMeta(){
   try { localStorage.setItem(META_KEY, JSON.stringify({firstMonth, currentMonth, dataVersion})); } catch(e){}
@@ -1572,6 +1573,7 @@ function loadMeta(){
   firstMonth = today;
   currentMonth = today;
   dataVersion = DATA_VERSION;   // carnet neuf : rien d'ancien à réparer
+  carnetNeuf = true;
   // migrate data from the very first (pre-month-tracking) version of this tool, if present
   let oldRaw;
   try { oldRaw = localStorage.getItem(OLD_STORAGE_KEY); } catch(e){ oldRaw = null; }
@@ -1746,10 +1748,25 @@ function rowHasFigures(tr, descEl){
                 existantes. Aucune suppression n'est déduite d'une simple visite.
      'geste'    — action explicite : fin de saisie d'un libellé, ou clic sur la croix. Là
                 seulement une ligne naît au mois courant, ou s'y arrête. */
+/* Premier mois enregistré où ce libellé apparaît, dans cette table.
+   La seule présence de la ligne suffit : elle existait bien ce mois-là.
+   Renvoie null si on ne le trouve nulle part. */
+function premierMoisAvecLibelle(tableId, desc, moisTries){
+  const key = normDesc(desc);
+  if (!key) return null;
+  for (let i = 0; i < moisTries.length; i++){       // déjà trié du plus ancien au plus récent
+    const m = moisTries[i];
+    const rows = (m.data && m.data.tables && m.data.tables[tableId]) || [];
+    if (rows.some(rd => rd && normDesc(rd.desc) === key)) return m.mk;
+  }
+  return null;
+}
+
 function updateDescTemplate(mode){
   const monthKey = currentMonth;
   const isGeste = (mode === 'geste');
   const peutCreer = isGeste || (mode === 'decouverte');
+  let moisCache = null;   // relu au plus une fois, et seulement si un libellé inconnu apparaît
   const tpl = loadDescTemplate();
 
   DESC_CARRY_TABLES.forEach(id=>{
@@ -1770,8 +1787,21 @@ function updateDescTemplate(mode){
       let e = byKey[key];
       if (!e){
         if (!peutCreer) return;
-        // une ligne naît au mois courant si c'est un geste ; sinon on ne fait que constater
-        e = { desc: descEl.value, since: isGeste ? monthKey : DAWN, until: null };
+        /* Un geste crée la ligne au mois où il a lieu. Une simple découverte, elle, ne fait
+           que constater l'existant : elle la date du PREMIER mois enregistré où ce libellé
+           apparaît réellement — et non « depuis toujours ».
+
+           Avec « depuis toujours », une ligne entrée dans le modèle par constat (un
+           rechargement avant que le libellé ait été validé, par exemple) se serait mise à
+           apparaître dans les mois passés, alors qu'elle n'y a jamais existé. C'est
+           exactement la famille de bug qui a fait dériver un carnet entier. */
+        let debut = monthKey;
+        if (!isGeste){
+          if (moisCache === null) moisCache = moisEnregistresTries();
+          const trouve = premierMoisAvecLibelle(id, descEl.value, moisCache);
+          debut = (trouve !== null && trouve < monthKey) ? trouve : monthKey;
+        }
+        e = { desc: descEl.value, since: debut, until: null };
         byKey[key] = e;
         list.push(e);
       } else if (e.until && monthKey >= e.until){
@@ -2964,6 +2994,9 @@ loadMeta();
 const bilanMigration = migrerDonnees();
 buildDefaultRows();
 loadState();
+/* Carnet tout neuf : son premier mois est actif dès l'ouverture. Accueillir quelqu'un par
+   « ce mois n'est pas encore activé » n'a aucun sens quand il n'existe rien d'autre. */
+if (carnetNeuf) saveState();
 saveDescTemplate('decouverte');
 applyDescriptions(loadDescTemplate(), { sansValeurs: !moisEstActif() });
 if (moisEstActif()){
