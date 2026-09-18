@@ -389,6 +389,10 @@ footer{
       <button type="button" id="exportBtn">⬇️ Télécharger une sauvegarde de secours</button>
       <button type="button" id="importBtn">⬆️ Importer une sauvegarde</button>
     </div>
+    <div class="toolbar">
+      <button type="button" id="recalcAllMonthsBtn" title="Reprend tous les mois enregistrés et recalcule les soldes d'épargne à partir des dépôts et des retraits réellement saisis.">🔄 Recalculer tous les mois</button>
+      <button type="button" id="forceUpdateBtn" title="Vide le cache du navigateur et recharge la toute dernière version de l'outil. Ne touche à aucune donnée.">⬆️ Vérifier la mise à jour</button>
+    </div>
     <div class="toolbar"><span style="color:var(--navy); font-size:.8em; opacity:.85; max-width:640px; display:inline-block;">Astuce&nbsp;: si tu utilises la version en ligne (un lien, pas un fichier), tes données restent automatiquement même quand l'outil est mis à jour — ces deux boutons servent juste de copie de secours, ou pour transférer tes données d'un ancien fichier vers la version en ligne.</span></div>
   </div>
   <svg class="waves" viewBox="0 0 1200 90" preserveAspectRatio="none">
@@ -1173,7 +1177,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18";
+const BUILD_VERSION = "2026-09-18 (2)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1961,6 +1965,83 @@ function previousEnvelopeBalances(beforeMonthKey){
   return result;
 }
 
+/* Rejoue toute l'histoire des enveloppes et réécrit le « Déjà épargné » de CHAQUE mois
+   enregistré, pas seulement celui affiché.
+
+   Pourquoi ce bouton existe : l'affichage d'un mois est toujours juste, parce qu'il est
+   recalculé à l'ouverture. Mais la valeur ENREGISTRÉE d'un mois, elle, ne se met à jour que
+   lorsqu'on ouvre ce mois. Un carnet rempli sous une version plus ancienne garde donc des
+   soldes figés dans son stockage — et c'est cette valeur-là qui part dans le compte en ligne,
+   dans le PDF et dans les sauvegardes. Ce bouton remet tout d'aplomb d'un coup, sur tous les
+   mois, sans avoir à les rouvrir un par un.
+
+   Il ne touche JAMAIS à ce qui est saisi à la main : ni les dépôts, ni les retraits, ni le
+   montant de départ du tout premier mois d'une enveloppe. Il ne recalcule que du dérivé. */
+function recalculerTousLesMois(){
+  const since = envelopeSinceMap();
+  const months = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf(DATA_PREFIX) === 0) months.push(k.slice(DATA_PREFIX.length));
+    }
+  } catch(e){ return { mois: 0, corriges: 0 }; }
+  months.sort();                                  // du plus ancien au plus récent
+
+  const solde = {};                               // solde courant par enveloppe
+  let corriges = 0;
+
+  months.forEach(mk => {
+    let data;
+    try { data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || '{}'); } catch(e){ return; }
+    const rows = (data.tables && data.tables['tbl-epargne-ct']) || [];
+    let change = false;
+
+    rows.forEach(rd => {
+      if (!rd || !rd.desc || !String(rd.desc).trim()) return;
+      const key = normDesc(rd.desc);
+      if (mk < (since[key] || DAWN)) return;
+      const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
+                   || (rd.depot !== undefined && rd.depot !== '')
+                   || (rd.retrait !== undefined && rd.retrait !== '');
+      if (!hasData) return;
+
+      if (solde[key] === undefined){
+        // premier mois de l'enveloppe : son montant de départ est une saisie, on n'y touche pas
+        solde[key] = rowEndBalance(rd);
+        return;
+      }
+      const attendu = solde[key].toFixed(2);
+      if (String(rd.startBalance === undefined ? '' : rd.startBalance) !== attendu){
+        rd.startBalance = attendu;
+        change = true;
+      }
+      solde[key] = solde[key] + num(rd.depot) - num(rd.retrait);
+    });
+
+    if (!change) return;
+    try {
+      localStorage.setItem(DATA_PREFIX + mk, JSON.stringify(data));
+      corriges++;
+      if (window.__markMonthDirty) window.__markMonthDirty(mk);
+    } catch(e){}
+  });
+
+  if (corriges && window.__syncToCloud) window.__syncToCloud();
+  return { mois: months.length, corriges: corriges };
+}
+
+/* Réaffiche le mois courant depuis zéro : même enchaînement qu'un changement de mois. */
+function rafraichirMoisAffiche(){
+  resetFormBlank();
+  loadState();
+  saveDescTemplate('decouverte');
+  applyDescriptions(loadDescTemplate());
+  applyEnvelopeCarryForward();
+  saveState();
+  recalcAll();
+}
+
 function applyEnvelopeCarryForward(){
   const prevBalances = previousEnvelopeBalances(currentMonth);
   const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
@@ -1991,16 +2072,10 @@ function goToMonth(newKey){
   saveState();
   currentMonth = newKey;
   saveMeta();
-  resetFormBlank();
-  loadState();
-  /* Recenser ce que ce mois contient déjà AVANT que applyDescriptions ne nettoie quoi que ce
-     soit : sinon une ligne que le modèle ne connaît pas encore serait effacée avant d'avoir
-     eu la moindre chance d'y entrer. */
-  saveDescTemplate('decouverte');
-  applyDescriptions(loadDescTemplate());
-  applyEnvelopeCarryForward();
-  saveState();
-  recalcAll();
+  /* rafraichirMoisAffiche recense ce que ce mois contient déjà AVANT que applyDescriptions ne
+     nettoie quoi que ce soit : sinon une ligne que le modèle ne connaît pas encore serait
+     effacée avant d'avoir eu la moindre chance d'y entrer. */
+  rafraichirMoisAffiche();
   updateMonthIndicator();
   window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -2653,6 +2728,39 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
 
 /* visible proof a device is on the latest code — no devtools needed to check:
    shown in the footer always, and as a dismissing banner right after an auto-update. */
+document.getElementById('recalcAllMonthsBtn').addEventListener('click', ()=>{
+  const r = recalculerTousLesMois();
+  rafraichirMoisAffiche();
+  alert(r.corriges
+    ? r.corriges + ' mois sur ' + r.mois + ' ont été remis à jour.\n\n'
+      + 'Les soldes d\'épargne sont recalculés à partir des dépôts et des retraits réellement '
+      + 'saisis. Rien de ce que tu as tapé n\'a été modifié.'
+    : 'Tout est déjà à jour : les ' + r.mois + ' mois enregistrés sont cohérents.\n\n'
+      + 'Rien n\'a été modifié.');
+});
+
+/* Force la récupération de la dernière version : vide le cache du navigateur et recharge.
+   Aucune donnée n'est touchée — elles ne sont pas dans le cache mais dans le stockage du site,
+   que cette opération ne regarde même pas. */
+document.getElementById('forceUpdateBtn').addEventListener('click', async ()=>{
+  const avant = BUILD_VERSION;
+  try {
+    if (window.caches){
+      const noms = await caches.keys();
+      await Promise.all(noms.map(n => caches.delete(n)));
+    }
+    if (navigator.serviceWorker){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update().catch(()=>{})));
+    }
+  } catch(e){}
+  try { sessionStorage.setItem('justUpdated', '1'); } catch(e){}
+  alert('Version actuelle : ' + avant + '\n\nLa page va se recharger pour récupérer la dernière '
+      + 'version. Regarde la version affichée tout en bas après le rechargement : si elle a '
+      + 'changé, la mise à jour est arrivée.\n\nAucune donnée n\'est touchée.');
+  location.reload();
+});
+
 document.getElementById('buildVersionLabel').textContent = 'Version du ' + BUILD_VERSION;
 try {
   if (sessionStorage.getItem('justUpdated') === '1'){
