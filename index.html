@@ -1190,7 +1190,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (4)";
+const BUILD_VERSION = "2026-09-18 (5)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1496,7 +1496,14 @@ let currentMonth, firstMonth;
    repart dans le compte en ligne. Personne n'a de bouton à trouver ni de ligne à ressaisir.
    Pour diffuser une future réparation : écrire la fonction, l'appeler dans migrerDonnees(),
    incrémenter DATA_VERSION. */
-const DATA_VERSION = 2;
+/* Passée à 3 le 18/09/2026, et il faut comprendre pourquoi pour ne pas refaire l'erreur :
+   en version 2, la réparation s'exécutait bien mais ses mois corrigés ne remontaient pas dans
+   le compte, faute de moteur de synchronisation disponible si tôt. En revanche la SUITE de la
+   session poussait les réglages, dataVersion compris. Résultat : la copie en ligne se
+   retrouvait estampillée « réparée » alors que ses mois étaient restés anciens — et la
+   réparation ne se redéclenchait plus jamais. Incrémenter la version est la seule façon de
+   rattraper les comptes déjà marqués à tort. */
+const DATA_VERSION = 3;
 let dataVersion = 0;
 
 function saveMeta(){
@@ -1507,7 +1514,9 @@ function saveMeta(){
 function migrerDonnees(){
   if (dataVersion >= DATA_VERSION) return null;
 
-  // v2 : les soldes d'épargne des mois enregistrés avant la refonte du report étaient figés
+  /* v2 : les soldes d'épargne enregistrés avant la refonte du report étaient figés.
+     v3 : même réparation, rejouée pour les comptes que la v2 avait marqués sans les corriger
+          en ligne. Elle est sans effet là où tout est déjà juste, donc sans risque. */
   const bilan = recalculerTousLesMois();
 
   dataVersion = DATA_VERSION;
@@ -2023,6 +2032,20 @@ function previousEnvelopeBalances(beforeMonthKey){
 
    Il ne touche JAMAIS à ce qui est saisi à la main : ni les dépôts, ni les retraits, ni le
    montant de départ du tout premier mois d'une enveloppe. Il ne recalcule que du dérivé. */
+/* File des mois modifiés en dehors d'une saisie à l'écran.
+
+   Elle existe AVANT le moteur de synchronisation, et c'est tout l'intérêt : la réparation
+   automatique s'exécute à l'ouverture de la page, bien avant que la connexion au compte soit
+   établie. À ce moment-là window.__markMonthDirty n'existe pas encore, si bien que la
+   réparation restait sur l'appareil et ne remontait jamais. Pire : la copie en ligne, restée
+   ancienne, l'écrasait à la session suivante. Le moteur vide cette file dès qu'il démarre. */
+window.__moisAReSynchroniser = window.__moisAReSynchroniser || [];
+function marquerMoisASynchroniser(mk){
+  if (!mk) return;
+  if (window.__markMonthDirty) window.__markMonthDirty(mk);
+  if (window.__moisAReSynchroniser.indexOf(mk) === -1) window.__moisAReSynchroniser.push(mk);
+}
+
 function recalculerTousLesMois(){
   const since = envelopeSinceMap();
   const months = [];
@@ -2069,7 +2092,7 @@ function recalculerTousLesMois(){
     try {
       localStorage.setItem(DATA_PREFIX + mk, JSON.stringify(data));
       corriges++;
-      if (window.__markMonthDirty) window.__markMonthDirty(mk);
+      marquerMoisASynchroniser(mk);
     } catch(e){}
   });
 
@@ -2613,7 +2636,7 @@ function propagerValeurEnAvant(tableId, desc, field, value){
   });
 
   // ces mois-là ont changé hors de l'écran : il faut aussi les remonter dans le compte
-  if (modifies.length && window.__markMonthDirty) modifies.forEach(window.__markMonthDirty);
+  modifies.forEach(marquerMoisASynchroniser);
   if (modifies.length && window.__syncToCloud) window.__syncToCloud();
 }
 
@@ -3029,6 +3052,16 @@ async function bootstrapSession(user){
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('appContent').style.display = 'block';
   setSyncState('✓ sauvegardé en ligne');
+
+  /* La réparation automatique des données tourne à l'ouverture de la page, donc avant ce
+     moteur. On récupère ici les mois qu'elle a corrigés pour les remonter dans le compte :
+     sans ça la réparation reste sur l'appareil et la copie en ligne la réécrase. */
+  const enAttente = window.__moisAReSynchroniser || [];
+  if (enAttente.length){
+    enAttente.forEach(mk => dirtyMonths.add(mk));
+    enAttente.length = 0;
+    scheduleSyncToCloud();
+  }
 
   try {
     const migrated = sessionStorage.getItem('justMigrated');
