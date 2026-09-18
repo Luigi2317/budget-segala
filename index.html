@@ -1190,7 +1190,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (3)";
+const BUILD_VERSION = "2026-09-18 (4)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1481,8 +1481,39 @@ function formatMonthLabel(k){ const {y,m} = parseMonthKey(k); return `${MONTH_NA
 
 let currentMonth, firstMonth;
 
+/* BUILD_VERSION dit quelle version du CODE tourne. DATA_VERSION dit jusqu'où les DONNÉES
+   enregistrées ont été remises d'aplomb. Les deux sont indépendantes, et c'est là que se
+   jouait le « chez moi ça marche, chez elle non » :
+
+   le code, lui, se diffuse tout seul — une seule adresse, aucun cache, tout le monde a la
+   même version en rouvrant l'appli. Mais un carnet rempli sous une version antérieure garde
+   des valeurs calculées à l'ancienne dans son stockage, et aucune mise à jour du code ne va
+   les rechercher. Celui qui a tout ressaisi récemment ne voit rien ; celui qui a des mois
+   anciens reste avec ses vieilles valeurs. D'où l'écart entre deux comptes sur le même site.
+
+   Désormais chaque réparation de données porte un numéro. À l'ouverture, si les données d'un
+   compte sont en retard sur le code, la réparation s'exécute toute seule, une fois, puis
+   repart dans le compte en ligne. Personne n'a de bouton à trouver ni de ligne à ressaisir.
+   Pour diffuser une future réparation : écrire la fonction, l'appeler dans migrerDonnees(),
+   incrémenter DATA_VERSION. */
+const DATA_VERSION = 2;
+let dataVersion = 0;
+
 function saveMeta(){
-  try { localStorage.setItem(META_KEY, JSON.stringify({firstMonth, currentMonth})); } catch(e){}
+  try { localStorage.setItem(META_KEY, JSON.stringify({firstMonth, currentMonth, dataVersion})); } catch(e){}
+}
+
+/* Renvoie un compte rendu si quelque chose a été réparé, sinon null. */
+function migrerDonnees(){
+  if (dataVersion >= DATA_VERSION) return null;
+
+  // v2 : les soldes d'épargne des mois enregistrés avant la refonte du report étaient figés
+  const bilan = recalculerTousLesMois();
+
+  dataVersion = DATA_VERSION;
+  saveMeta();
+  if (window.__syncToCloud) window.__syncToCloud();   // que la réparation remonte dans le compte
+  return bilan;
 }
 
 function loadMeta(){
@@ -1493,12 +1524,14 @@ function loadMeta(){
       const meta = JSON.parse(raw);
       firstMonth = meta.firstMonth;
       currentMonth = meta.currentMonth || meta.firstMonth;
+      dataVersion = Number(meta.dataVersion) || 0;
       return;
     } catch(e){ /* corrupt meta, fall through to fresh start */ }
   }
   const today = monthKeyFromDate(new Date());
   firstMonth = today;
   currentMonth = today;
+  dataVersion = DATA_VERSION;   // carnet neuf : rien d'ancien à réparer
   // migrate data from the very first (pre-month-tracking) version of this tool, if present
   let oldRaw;
   try { oldRaw = localStorage.getItem(OLD_STORAGE_KEY); } catch(e){ oldRaw = null; }
@@ -2705,6 +2738,9 @@ document.getElementById('yearSelect').addEventListener('change', ()=>{
 /* ---------- init ---------- */
 trySeedFromEmbeddedData();
 loadMeta();
+/* Avant tout affichage : si ce compte porte des données antérieures à la dernière réparation,
+   on la passe ici, automatiquement. C'est ce qui remplace le bouton à cliquer. */
+const bilanMigration = migrerDonnees();
 buildDefaultRows();
 loadState();
 saveDescTemplate('decouverte');
@@ -2714,6 +2750,12 @@ saveState();
 recalcAll();
 populateMonthYearSelects();
 updateMonthIndicator();
+
+if (bilanMigration && bilanMigration.corriges){
+  showDataBanner('✓ Tes données ont été mises à jour automatiquement — '
+    + bilanMigration.corriges + ' mois recalculé' + (bilanMigration.corriges > 1 ? 's' : '')
+    + '. Rien de ce que tu as saisi n\'a changé.');
+}
 
 /* No service worker / offline cache here on purpose: this app requires a live connection
    to Supabase to do anything useful anyway, so there's no benefit to offline caching —
@@ -2781,6 +2823,17 @@ try {
     showUpdateBanner();
   }
 } catch(e){}
+
+/* Bandeau discret annonçant une réparation automatique des données. Volontairement distinct
+   du bandeau de mise à jour du code : ce ne sont pas les mêmes événements. */
+function showDataBanner(text){
+  const bar = document.createElement('div');
+  bar.textContent = text;
+  bar.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:999; background:#1f6f8b; color:#fff;'
+    + 'text-align:center; padding:10px 14px; font-family:Georgia,serif; font-size:.95em; box-shadow:0 2px 8px rgba(0,0,0,.25);';
+  document.body.appendChild(bar);
+  setTimeout(() => { bar.style.transition = 'opacity .6s'; bar.style.opacity = '0'; setTimeout(() => bar.remove(), 700); }, 7000);
+}
 
 function showUpdateBanner(){
   const bar = document.createElement('div');
