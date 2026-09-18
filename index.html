@@ -1216,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (7)";
+const BUILD_VERSION = "2026-09-18 (8)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -2186,6 +2186,20 @@ function applyEnvelopeCarryForward(){
       startIn.classList.remove('derived');
       return;
     }
+
+    /* Un montant repris à la main sur ce mois-là fait autorité, et il n'est pas question de
+       l'écraser en l'affichant. Le calcul de fond le respecte déjà — c'est lui qui sert de
+       nouveau point de départ pour la suite — mais l'affichage, lui, réécrivait la case sans
+       distinction : ouvrir le mois suffisait à remplacer la saisie par le report, puis à
+       l'enregistrer. Toute la cascade des mois suivants partait avec. */
+    if (estUnNouveauSocle({ startBalance: startIn.value }, prev)){
+      startIn.readOnly = false;
+      startIn.title = "Montant repris à la main pour ce mois. Vide la case pour revenir au report automatique ("
+                    + prev.toFixed(2).replace('.', ',') + " €).";
+      startIn.classList.remove('derived');
+      return;
+    }
+
     startIn.value = prev.toFixed(2);
     startIn.readOnly = true;
     startIn.title = "Reporté automatiquement : c'est le Montant total du mois précédent.";
