@@ -1216,7 +1216,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (8)";
+const BUILD_VERSION = "2026-09-18 (9)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1994,8 +1994,15 @@ function ressembleASaisieManuelle(v){
 
 /* Ce mois reprend-il la main sur le solde courant ? */
 function estUnNouveauSocle(rd, soldeCourant){
-  return ressembleASaisieManuelle(rd.startBalance)
-      && Math.abs(num(rd.startBalance) - soldeCourant) > 0.005;
+  const ecarte = String(rd.startBalance === undefined ? '' : rd.startBalance).trim() !== ''
+              && Math.abs(num(rd.startBalance) - soldeCourant) > 0.005;
+
+  // L'application a noté elle-même l'origine de la valeur : on s'y fie, sans interpréter.
+  if (rd.startAuto === true) return false;      // calculée : elle se recalcule, toujours
+  if (rd.startAuto === false) return ecarte;    // saisie : elle fait autorité
+
+  // Carnets antérieurs au marqueur : les décimales restent le seul indice disponible.
+  return ressembleASaisieManuelle(rd.startBalance) && ecarte;
 }
 
 function rowEndBalance(rd){
@@ -2570,10 +2577,22 @@ function trySeedFromEmbeddedData(){
 /* ---------- save / load ---------- */
 function collectRow(tr){
   const g = sel => { const el = tr.querySelector(sel); return el ? el.value : undefined; };
+  /* Le champ « Déjà épargné » est en lecture seule quand sa valeur a été calculée, modifiable
+     quand elle est saisie. On enregistre cet état AVEC la valeur : c'est la seule façon fiable
+     de savoir d'où elle vient.
+
+     Auparavant on le devinait aux décimales — une valeur calculée passe par toFixed(2) et se
+     termine donc par « .00 ». Sauf que le champ numérique de certaines tablettes rabote les
+     zéros inutiles en repassant par l'écran : « 1450.00 » y devient « 1450 », et la valeur
+     calculée se déguisait alors en saisie manuelle, devenant intouchable. Sur un ordinateur
+     de bureau la même valeur gardait ses décimales. C'est très exactement ce qui faisait
+     qu'un carnet se comportait différemment d'un appareil à l'autre. */
+  const startEl = tr.querySelector('.start-balance-in');
   return {
     desc: g('.desc-in'), date: g('.date-in'), budget: g('.budget-in'), reel: g('.reel-in'),
     montant: g('.montant-in'), objectif: g('.objectif-in'),
     startBalance: g('.start-balance-in'),
+    startAuto: startEl ? startEl.readOnly : undefined,
     depot: g('.depot-in'), retrait: g('.retrait-in'),
     epargnes: g('.epargnes-in'), defis: g('.defis-in'),
     weeks: [...tr.querySelectorAll('.week-in')].map(i=>i.value),
