@@ -260,6 +260,16 @@ footer{
 }
 .modal-header h3{color:var(--navy); margin:0;}
 .modal-close{background:none; border:none; font-size:1.3em; color:var(--navy); cursor:pointer; line-height:1;}
+/* Fenêtre de choix (montant reporté, suppression d'une ligne) : de gros boutons, faciles à toucher */
+.choix-texte{color:var(--navy); line-height:1.45; margin:12px 0 4px; white-space:pre-line;}
+.choix-note{color:var(--navy); opacity:.75; font-size:.9em; margin:0 0 14px; white-space:pre-line;}
+.choix-btns{display:flex; flex-direction:column; gap:10px;}
+.choix-btn{
+  font:inherit; font-size:1em; padding:12px 14px; border-radius:8px; cursor:pointer;
+  border:2px solid var(--navy); background:var(--paper); color:var(--navy); text-align:center;
+}
+.choix-btn.principal{background:var(--navy); color:#fff;}
+.choix-btn.discret{border-color:transparent; text-decoration:underline;}
 .save-item{
   display:flex; justify-content:space-between; align-items:center; gap:10px;
   padding:10px 0; border-bottom:1px solid #e3d9bd;
@@ -1216,7 +1226,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-09-18 (14)";
+const BUILD_VERSION = "2026-10-04 (16)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1277,24 +1287,31 @@ function addRow(tableId, prefillDesc){
   tbody.appendChild(tr);
   if (cfg.removable){
     tr.querySelector('.rm-btn').addEventListener('click', () => {
-      /* Supprimer une ligne vaut pour ce mois ET les suivants. Quand des montants y sont déjà
-         saisis, on le dit avant, une seule fois : c'est le seul moment où l'utilisatrice peut
-         encore décider en connaissance de cause. */
+      /* Une ligne qui porte un nom voyage de mois en mois : on demande donc jusqu'où la
+         supprimer. Les mois précédents ne sont jamais touchés, quel que soit le choix. */
       const descEl = tr.querySelector('.desc-in');
       const desc = descEl ? descEl.value.trim() : '';
       if (desc && DESC_CARRY_TABLES.indexOf(tableId) !== -1){
         const n = laterMonthsWithFigures(tableId, desc);
-        if (n > 0 && !confirm(
-              '« ' + desc + ' » contient aussi des montants dans ' + n + ' mois suivant'
-              + (n > 1 ? 's' : '') + '.\n\n'
-              + 'En supprimant cette ligne, elle disparaîtra de ce mois et des mois suivants, '
-              + 'avec les montants qui s\'y trouvent.\n'
-              + 'Les mois précédents ne sont pas touchés.\n\n'
-              + 'Supprimer quand même ?')) return;
+        const avertissement = n > 0
+          ? 'Attention : « ' + desc + ' » a aussi des montants dans ' + n + ' mois suivant'
+            + (n > 1 ? 's' : '') + '. Avec « ce mois-ci et les mois suivants », ils seront effacés.\n'
+          : '';
+        demanderChoix('Supprimer « ' + desc + ' »', 'Tu veux supprimer cette ligne :',
+            avertissement + 'Les mois précédents ne changent pas.', [
+          { cle: 'ici',     texte: 'Seulement pour ce mois-ci' },
+          { cle: 'suite',   texte: 'Pour ce mois-ci et les mois suivants', principal: true },
+          { cle: 'annuler', texte: 'Annuler, ne rien supprimer', discret: true }
+        ]).then(choix => {
+          if (choix === 'ici') retirerLigneIci(tableId, tr);
+          else if (choix === 'suite') supprimerLigneEtSuivants(tableId, tr, desc);
+        });
+        return;
       }
+      // ligne sans nom : elle n'existe que dans ce mois, rien à demander
       tr.remove();
       recalcTable(tableId);
-      saveDescTemplate('geste');   // la suppression vaut pour ce mois et les suivants
+      saveDescTemplate('geste');
       saveState();
     });
   }
@@ -1457,20 +1474,33 @@ function updateLivretsTotal(){
 /* ---------- initial static rows ---------- */
 const CATEGORIES = ['Courses','Shopping','Divers','Restaurant','Animaux','Santé','Loisirs'];
 
+/* Nombre de lignes vierges de chaque tableau, comme dans le carnet papier d'origine.
+
+   Sert à deux choses, et c'est pour cela qu'il n'y a qu'une seule liste : construire un mois
+   vierge, et servir de PLANCHER au nettoyage des lignes vides. Sans ce plancher, le nettoyage
+   — écrit pour supprimer les restes d'anciennes catégories — rabotait aussi le carnet neuf :
+   un nouvel arrivant ouvrait huit tableaux sur dix réduits à une seule ligne, et l'outil avait
+   l'air cassé avant même d'avoir servi. */
+const LIGNES_VIERGES = {
+  'tbl-revenus': 7,
+  'tbl-credits': 5,
+  'tbl-charges-fixes': 12,
+  'tbl-charges-var': 5,
+  'tbl-enveloppes': CATEGORIES.length,
+  'tbl-depenses-semaine': CATEGORIES.length,
+  'tbl-economies-semaine': 7,
+  'tbl-epargne-ct': 9,
+  'tbl-epargne-lt': 8,
+  'tbl-defis': 8,
+};
+
 function buildDefaultRows(){
   Object.keys(ADDABLE_TABLES).forEach(id=>{ document.getElementById(id).tBodies[0].innerHTML = ''; });
   document.getElementById('tbl-repartition').tBodies[0].innerHTML = '';
 
-  for (let i=0;i<7;i++) addRow('tbl-revenus');
-  for (let i=0;i<5;i++) addRow('tbl-credits');
-  for (let i=0;i<12;i++) addRow('tbl-charges-fixes');
-  for (let i=0;i<5;i++) addRow('tbl-charges-var');
-  for (let i=0;i<CATEGORIES.length;i++) addRow('tbl-enveloppes');
-  for (let i=0;i<CATEGORIES.length;i++) addRow('tbl-depenses-semaine');
-  for (let i=0;i<7;i++) addRow('tbl-economies-semaine');
-  for (let i=0;i<9;i++) addRow('tbl-epargne-ct');
-  for (let i=0;i<8;i++) addRow('tbl-epargne-lt');
-  for (let i=0;i<8;i++) addRow('tbl-defis');
+  Object.keys(LIGNES_VIERGES).forEach(id=>{
+    for (let i = 0; i < LIGNES_VIERGES[id]; i++) addRow(id);
+  });
 
   // fixed répartition table: 5 weeks, not removable, not addable
   const tbody = document.getElementById('tbl-repartition').tBodies[0];
@@ -1665,9 +1695,15 @@ function previousFieldValues(tableId, fields, beforeMonthKey){
 
   earlier.forEach(mk => {
     let rows = [];
+    let videVolontaire = false;
     try {
       const data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || '{}');
       rows = (data.tables && data.tables[tableId]) || [];
+      /* Un mois qui a déjà reçu ses reports ne contient plus de case vide « par défaut » :
+         si une case y est vide, c'est qu'on l'a vidée exprès. Ce vide est alors une vraie
+         réponse, qui arrête la recherche — sinon un montant effacé ressortait d'un mois plus
+         ancien à la création du mois suivant. */
+      videVolontaire = !!data.reportsFaits;
     } catch(e){ return; }
     rows.forEach(rd => {
       if (!rd || !rd.desc || !String(rd.desc).trim()) return;
@@ -1675,8 +1711,11 @@ function previousFieldValues(tableId, fields, beforeMonthKey){
       const bucket = result[key] || (result[key] = {});
       fields.forEach(fld => {
         if (bucket[fld] !== undefined) return;       // un mois plus récent a déjà répondu
+        // un montant choisi « seulement pour ce mois-ci » n'est pas le montant habituel
+        if (Array.isArray(rd.ponctuels) && rd.ponctuels.indexOf(fld) !== -1) return;
         const v = rd[fld];
-        if (v === undefined || v === null || String(v).trim() === '') return;
+        if (v === undefined || v === null) return;
+        if (String(v).trim() === '' && !videVolontaire) return;
         bucket[fld] = String(v);
       });
     });
@@ -1841,6 +1880,8 @@ function updateDescTemplate(mode){
       list.forEach(e=>{
         if (!isActiveAt(e, monthKey)) return;
         if (seen.has(normDesc(e.desc))) return;
+        // retirée de CE mois seulement : elle continue d'exister dans les mois suivants
+        if (estRetireeIci(id, e.desc)) return;
         e.until = monthKey;
       });
     }
@@ -1880,8 +1921,13 @@ function loadDescTemplate(){
 
 function applyDescriptions(tpl, options){
   const sansValeurs = !!(options && options.sansValeurs);
+  /* Mois ayant déjà reçu ses reports : seules les lignes qui y arrivent maintenant (une
+     enveloppe créée dans un mois précédent) reçoivent leurs montants. Les autres lignes ont
+     déjà eu les leurs : une case vide y est voulue et doit le rester. */
+  const nouvellesSeulement = !!(options && options.reportsNouvellesLignesSeulement);
   DESC_CARRY_TABLES.forEach(id=>{
     const extraFields = sansValeurs ? [] : (STICKY_EXTRA_FIELDS[id] || []);
+    const nouvelles = new Set();   // lignes qui arrivent dans ce mois lors de cet appel
     let rows = activeTemplateRows(tpl, id, currentMonth);
     /* Les libellés d'origine ne reviennent que si ce tableau n'a JAMAIS servi. Sans cette
        nuance, tout vider ferait réapparaître les catégories par défaut au mois suivant. */
@@ -1915,8 +1961,10 @@ function applyDescriptions(tpl, options){
       if (rowHasFigures(tr, descEl)) return;
       const key = normDesc(rowData.desc);
       if (dejaPresent.has(key)) return;                // déjà présente ailleurs dans le tableau
+      if (estRetireeIci(id, rowData.desc)) return;     // retirée de ce mois seulement
       descEl.value = rowData.desc;
       dejaPresent.add(key);
+      nouvelles.add(tr);
     });
 
     /* pass 1 bis : toute ligne du modèle ABSENTE de ce mois est ajoutée à la fin.
@@ -1933,7 +1981,8 @@ function applyDescriptions(tpl, options){
       if (!rowData.desc || !rowData.desc.trim()) return;
       const key = normDesc(rowData.desc);
       if (present.has(key)) return;
-      addRow(id, rowData.desc);
+      if (estRetireeIci(id, rowData.desc)) return;     // retirée de ce mois seulement
+      nouvelles.add(addRow(id, rowData.desc));
       present.add(key);
     });
 
@@ -1965,9 +2014,11 @@ function applyDescriptions(tpl, options){
         const stoppee = arreteesIci.has(key);
         if (rowHasFigures(tr, descEl) && !stoppee) return;
         /* Une ligne explicitement supprimée s'en va même si c'est la dernière : le tableau a
-           son bouton « + ajouter », il n'y a donc pas d'impasse. En revanche on ne vide jamais
-           un tableau par simple nettoyage de lignes vides. */
-        if (!stoppee && tbody.rows.length <= 1) return;
+           son bouton « + ajouter », il n'y a donc pas d'impasse. En revanche le simple nettoyage
+           des lignes vides ne descend jamais sous le nombre de lignes vierges du tableau —
+           sinon un carnet neuf, qui n'a encore aucun modèle, se retrouverait vidé de ses lignes
+           à remplir. */
+        if (!stoppee && tbody.rows.length <= (LIGNES_VIERGES[id] || 1)) return;
         tr.remove();
       });
     }
@@ -1979,6 +2030,7 @@ function applyDescriptions(tpl, options){
     if (extraFields.length){
       const repris = previousFieldValues(id, extraFields, currentMonth);
       [...tbody.rows].forEach(tr=>{
+        if (nouvellesSeulement && !nouvelles.has(tr)) return;
         const descEl = tr.querySelector('.desc-in');
         const match = descEl && repris[normDesc(descEl.value)];
         if (!match) return;
@@ -2270,6 +2322,156 @@ function recalculerTousLesMois(){
   return { mois: months.length, corriges: corriges };
 }
 
+/* Le mois affiché a-t-il déjà reçu ses montants reportés (Budget, Objectif, Dépôt) ?
+   Lu par loadState, enregistré par saveState avec le mois.
+
+   Le report ne se fait qu'UNE fois, à la naissance du mois. Avant, il se refaisait à chaque
+   ouverture : toute case vide était regarnie avec le dernier montant connu. On ne pouvait donc
+   jamais effacer un dépôt — il revenait dès qu'on rouvrait le mois, quelle que soit la réponse
+   donnée à la question « appliquer aux mois suivants ? ». */
+let reportsFaits = false;
+
+/* Lignes retirées du mois affiché SEULEMENT (choix « Seulement pour ce mois-ci » sur la croix),
+   par tableau : { 'tbl-epargne-ct': ['vacances', ...] } — noms passés par normDesc.
+   Lu par loadState, enregistré par saveState avec le mois. Le modèle, lui, n'est pas touché :
+   la ligne continue d'exister dans les mois suivants. Sans cette liste, la ligne reviendrait
+   d'elle-même à la prochaine ouverture du mois, puisque le modèle la dit toujours active. */
+let lignesRetireesIci = {};
+
+function estRetireeIci(tableId, desc){
+  const liste = lignesRetireesIci[tableId];
+  return !!liste && liste.indexOf(normDesc(desc)) !== -1;
+}
+
+function retirerLigneIci(tableId, tr){
+  const descEl = tr.querySelector('.desc-in');
+  const key = descEl ? normDesc(descEl.value) : '';
+  if (key){
+    const liste = lignesRetireesIci[tableId] || (lignesRetireesIci[tableId] = []);
+    if (liste.indexOf(key) === -1) liste.push(key);
+  }
+  tr.remove();
+  recalcTable(tableId);
+  saveDescTemplate('geste');
+  saveState();
+}
+
+/* « Pour ce mois-ci et les mois suivants » : la ligne s'arrête dans le modèle à partir de ce
+   mois, ET elle est retirée tout de suite des mois suivants déjà enregistrés, montants compris.
+
+   Avant, ces mois-là n'étaient nettoyés qu'à leur prochaine ouverture. Entre-temps, ils
+   gardaient l'ancienne ligne : la recréer sous le même nom la faisait revenir avec ses anciens
+   montants (« 4 mois suivants portent une valeur différente »). */
+function supprimerLigneEtSuivants(tableId, tr, desc){
+  tr.remove();
+  recalcTable(tableId);
+  saveDescTemplate('geste');
+  saveState();
+  retirerLigneDesMoisSuivants(tableId, desc);
+}
+
+function retirerLigneDesMoisSuivants(tableId, desc){
+  const key = normDesc(desc);
+  if (!key) return;
+  const modifies = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(DATA_PREFIX) !== 0) continue;
+      const mk = k.slice(DATA_PREFIX.length);
+      if (mk <= currentMonth) continue;              // le passé n'est jamais touché
+      let data;
+      try { data = JSON.parse(localStorage.getItem(k) || '{}'); } catch(e){ continue; }
+      const rows = data.tables && data.tables[tableId];
+      if (!Array.isArray(rows)) continue;
+      const restantes = rows.filter(rd => !(rd && normDesc(rd.desc) === key));
+      if (restantes.length === rows.length) continue;
+      data.tables[tableId] = restantes;
+      modifies.push({ k, mk, data });
+    }
+  } catch(e){ return; }
+  /* On écrit APRÈS le parcours : modifier le stockage pendant qu'on le parcourt par index
+     pourrait en déplacer les clés. */
+  modifies.forEach(m => {
+    try { localStorage.setItem(m.k, JSON.stringify(m.data)); } catch(e){}
+    marquerMoisASynchroniser(m.mk);
+  });
+  if (modifies.length && window.__syncToCloud) window.__syncToCloud();
+}
+
+/* Montants choisis « seulement pour ce mois-ci » (Budget, Objectif, Dépôt) : la ligne garde la
+   liste de ses champs concernés dans un attribut data-ponctuels, enregistré avec le mois
+   (collectRow / restoreRow). previousFieldValues ignore ces montants : le mois suivant reprend
+   le montant habituel, pas l'exception. */
+function champsPonctuels(tr){
+  const s = tr && tr.dataset ? tr.dataset.ponctuels : '';
+  return s ? s.split(',') : [];
+}
+
+function marquerPonctuel(tr, field, ponctuel){
+  if (!tr || !tr.dataset) return;
+  const liste = champsPonctuels(tr).filter(f => f !== field);
+  if (ponctuel) liste.push(field);
+  tr.dataset.ponctuels = liste.join(',');
+}
+
+/* Fenêtre de choix à gros boutons, à la place de confirm().
+   confirm() n'offre que OK / Annuler, avec un texte imposé par le navigateur : impossible d'y
+   écrire « Seulement pour ce mois-ci ». C'est ce qui rendait l'ancienne question incompréhensible.
+   Renvoie une promesse : le code qui demande attend la réponse sans bloquer la page.
+   boutons : [{ cle, texte, principal?, discret? }] ; la promesse donne la `cle` choisie. */
+function demanderChoix(titre, texte, note, boutons){
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const box = document.createElement('div');
+    box.className = 'modal-box';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    const h3 = document.createElement('h3');
+    h3.textContent = titre;                  // textContent : un nom saisi n'est jamais interprété comme du HTML
+    header.appendChild(h3);
+    box.appendChild(header);
+
+    const p = document.createElement('p');
+    p.className = 'choix-texte';
+    p.textContent = texte;
+    box.appendChild(p);
+    if (note){
+      const n = document.createElement('p');
+      n.className = 'choix-note';
+      n.textContent = note;
+      box.appendChild(n);
+    }
+
+    const zone = document.createElement('div');
+    zone.className = 'choix-btns';
+    boutons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choix-btn' + (b.principal ? ' principal' : '') + (b.discret ? ' discret' : '');
+      btn.textContent = b.texte;
+      btn.addEventListener('click', () => { overlay.remove(); resolve(b.cle); });
+      zone.appendChild(btn);
+    });
+    box.appendChild(zone);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+}
+
+function appliquerDescriptionsALOuverture(actif){
+  if (!actif){
+    applyDescriptions(loadDescTemplate(), { sansValeurs: true });
+    return;
+  }
+  applyDescriptions(loadDescTemplate(), { reportsNouvellesLignesSeulement: reportsFaits });
+  reportsFaits = true;
+}
+
 /* Réaffiche le mois courant depuis zéro : même enchaînement qu'un changement de mois. */
 function rafraichirMoisAffiche(){
   resetFormBlank();
@@ -2279,7 +2481,7 @@ function rafraichirMoisAffiche(){
   /* Sur un mois non activé on montre la liste des lignes, pour qu'on voie de quoi il aurait
      l'air — mais aucun chiffre reporté : ni les soldes d'épargne, ni les dépôts habituels.
      Rien n'est calculé, rien n'est enregistré, le mois reste sans existence. */
-  applyDescriptions(loadDescTemplate(), { sansValeurs: !actif });
+  appliquerDescriptionsALOuverture(actif);
   if (actif){
     applyEnvelopeCarryForward();
     saveState({ sansCreer: true });
@@ -2708,7 +2910,9 @@ function collectRow(tr){
     depot: g('.depot-in'), retrait: g('.retrait-in'),
     epargnes: g('.epargnes-in'), defis: g('.defis-in'),
     weeks: [...tr.querySelectorAll('.week-in')].map(i=>i.value),
-    check: (()=>{ const el = tr.querySelector('.check-in'); return el ? el.checked : undefined; })()
+    check: (()=>{ const el = tr.querySelector('.check-in'); return el ? el.checked : undefined; })(),
+    // absent quand la liste est vide : JSON.stringify omet les champs undefined
+    ponctuels: champsPonctuels(tr).length ? champsPonctuels(tr) : undefined
   };
 }
 function restoreRow(tr, rd){
@@ -2722,6 +2926,7 @@ function restoreRow(tr, rd){
   (rd.weeks||[]).forEach((v,i)=>{ if (weekEls[i] && v!==undefined && v!=='') weekEls[i].value = v; });
   const chk = tr.querySelector('.check-in');
   if (chk && rd.check!==undefined) chk.checked = rd.check;
+  if (tr.dataset) tr.dataset.ponctuels = Array.isArray(rd.ponctuels) ? rd.ponctuels.join(',') : '';
 }
 
 /* Un mois « existe » dès lors qu'il est enregistré. Le consulter ne suffit pas. */
@@ -2750,10 +2955,21 @@ function majBandeauMois(){
 function saveState(options){
   if (options && options.sansCreer && !moisEstActif()) return;
   const data = { tables:{}, standalone:{} };
+  if (reportsFaits) data.reportsFaits = true;
   ALL_TABLE_IDS.forEach(id=>{
     const tbody = document.getElementById(id).tBodies[0];
     data.tables[id] = [...tbody.rows].map(collectRow);
   });
+  /* Une ligne retirée « seulement ce mois-ci » puis remise à la main dans ce même mois n'est
+     plus retirée : on la sort de la liste, sinon elle disparaîtrait à la prochaine ouverture. */
+  const retirees = {};
+  Object.keys(lignesRetireesIci).forEach(id=>{
+    const presentes = new Set((data.tables[id] || []).map(rd => normDesc(rd.desc || '')));
+    const reste = (lignesRetireesIci[id] || []).filter(key => !presentes.has(key));
+    if (reste.length) retirees[id] = reste;
+  });
+  lignesRetireesIci = retirees;
+  if (Object.keys(retirees).length) data.lignesRetirees = retirees;
   document.querySelectorAll('.standalone').forEach(el=>{
     data.standalone[el.id] = el.type==='checkbox' ? el.checked : el.value;
   });
@@ -2764,11 +2980,15 @@ function saveState(options){
 }
 
 function loadState(){
+  reportsFaits = false;
+  lignesRetireesIci = {};
   let raw;
   try { raw = localStorage.getItem(DATA_PREFIX+currentMonth); } catch(e){ return; }
   if (!raw) return;
   let data;
   try { data = JSON.parse(raw); } catch(e){ return; }
+  reportsFaits = !!data.reportsFaits;
+  if (data.lignesRetirees && typeof data.lignesRetirees === 'object') lignesRetireesIci = data.lignesRetirees;
 
   Object.entries(data.tables||{}).forEach(([id, rows])=>{
     const tableEl = document.getElementById(id);
@@ -2811,15 +3031,18 @@ document.addEventListener('input', e=>{
 
 const NOM_CHAMP = { budget: 'Budget', objectif: 'Objectif', depot: 'Dépôt ce mois' };
 
-/* Applique une valeur reportée à tous les mois POSTÉRIEURS, dans les données enregistrées.
-   Même règle que pour l'ajout et la suppression d'une ligne : ce qu'on change vaut pour le mois
-   courant et la suite, jamais pour le passé. On ne demande confirmation que si des mois suivants
-   portent une valeur DIFFÉRENTE — sinon on ne dérange personne. */
+/* « Pour ce mois-ci et les mois suivants » : applique la valeur à tous les mois POSTÉRIEURS déjà
+   enregistrés qui contiennent la ligne. Jamais au passé. La question est posée avant, par le
+   gestionnaire de l'événement 'change' (voir plus bas) : cette fonction ne demande plus rien.
+
+   Avant, elle posait elle-même un confirm(), et seulement si un mois suivant portait une valeur
+   différente : pour une ligne nouvelle, aucune question, et le montant devenait habituel d'office.
+   Une valeur vide (case vidée) s'applique comme les autres. Et une exception « seulement ce
+   mois-ci » posée sur un mois suivant est remplacée : la nouvelle valeur devient la règle. */
 function propagerValeurEnAvant(tableId, desc, field, value){
   const key = normDesc(desc);
   if (!key) return;
   const cibles = [];
-  let conflits = 0;
   try {
     for (let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i);
@@ -2831,30 +3054,21 @@ function propagerValeurEnAvant(tableId, desc, field, value){
       const rows = (data.tables && data.tables[tableId]) || [];
       const touche = rows.some(rd => rd && normDesc(rd.desc) === key);
       if (!touche) continue;
-      rows.forEach(rd => {
-        if (!rd || normDesc(rd.desc) !== key) return;
-        const actuel = rd[field];
-        if (actuel !== undefined && String(actuel).trim() !== '' && String(actuel) !== String(value)) conflits++;
-      });
       cibles.push({ mk, k, data, rows });
     }
   } catch(e){ return; }
   if (!cibles.length) return;
-
-  if (conflits > 0){
-    const nom = NOM_CHAMP[field] || field;
-    if (!confirm(
-      nom + ' de « ' + desc + ' » : ' + conflits + ' mois suivant' + (conflits > 1 ? 's portent' : ' porte')
-      + ' une valeur différente.\n\n'
-      + 'Veux-tu appliquer ' + value + ' à tous les mois suivants ?\n'
-      + 'Les mois précédents ne sont pas touchés.')) return;
-  }
 
   const modifies = [];
   cibles.forEach(c => {
     let change = false;
     c.rows.forEach(rd => {
       if (!rd || normDesc(rd.desc) !== key) return;
+      if (Array.isArray(rd.ponctuels) && rd.ponctuels.indexOf(field) !== -1){
+        rd.ponctuels = rd.ponctuels.filter(f => f !== field);
+        if (!rd.ponctuels.length) delete rd.ponctuels;
+        change = true;
+      }
       if (String(rd[field] === undefined ? '' : rd[field]) === String(value)) return;
       rd[field] = value;
       change = true;
@@ -2882,9 +3096,8 @@ document.addEventListener('change', e=>{
     return;
   }
 
-  /* Champs reportés d'un mois sur l'autre (Budget, Objectif, Dépôt) : une correction vaut
-     pour ce mois et les suivants. C'est aussi ce qui permet de réparer d'un geste une valeur
-     erronée qui s'était propagée. */
+  /* Champs reportés d'un mois sur l'autre (Budget, Objectif, Dépôt) : à chaque changement, on
+     demande si le nouveau montant vaut pour ce mois seulement, ou devient le montant habituel. */
   const sticky = STICKY_EXTRA_FIELDS[table.id] || [];
   const field = sticky.find(fld => e.target.matches('.' + fld + '-in'));
   if (!field) return;
@@ -2892,8 +3105,24 @@ document.addEventListener('change', e=>{
   const descEl = tr && tr.querySelector('.desc-in');
   const desc = descEl ? descEl.value.trim() : '';
   if (!desc) return;
+  const value = e.target.value;
+  const tableId = table.id;
+  const moisDuChoix = currentMonth;
   saveState();
-  propagerValeurEnAvant(table.id, desc, field, e.target.value);
+  const nom = NOM_CHAMP[field] || field;
+  const texte = value.trim()
+    ? 'Tu as mis ' + value.trim() + ' €. Ce montant vaut :'
+    : 'Tu as vidé la case. Ce changement vaut :';
+  demanderChoix(nom + ' — « ' + desc + ' »', texte, 'Les mois précédents ne changent pas.', [
+    { cle: 'ici',   texte: 'Seulement pour ce mois-ci' },
+    { cle: 'suite', texte: 'Pour ce mois-ci et les mois suivants', principal: true }
+  ]).then(choix => {
+    // la fenêtre bloque l'écran, mais par prudence : si le mois a changé entre-temps, on ne touche à rien
+    if (currentMonth !== moisDuChoix || !tr.isConnected) return;
+    marquerPonctuel(tr, field, choix === 'ici');
+    saveState();
+    if (choix === 'suite') propagerValeurEnAvant(tableId, desc, field, value);
+  });
 });
 
 document.addEventListener('click', e=>{
@@ -2998,7 +3227,7 @@ loadState();
    « ce mois n'est pas encore activé » n'a aucun sens quand il n'existe rien d'autre. */
 if (carnetNeuf) saveState();
 saveDescTemplate('decouverte');
-applyDescriptions(loadDescTemplate(), { sansValeurs: !moisEstActif() });
+appliquerDescriptionsALOuverture(moisEstActif());
 if (moisEstActif()){
   applyEnvelopeCarryForward();
   saveState({ sansCreer: true });
@@ -3044,6 +3273,7 @@ document.getElementById('activerMoisBtn').addEventListener('click', ()=>{
   /* Activer un mois, c'est lui donner une existence : on y applique les reports et on
      l'enregistre. Il entre alors dans le calcul des soldes des mois suivants. */
   applyDescriptions(loadDescTemplate());
+  reportsFaits = true;
   applyEnvelopeCarryForward();
   saveState();
   recalcAll();
