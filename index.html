@@ -1231,7 +1231,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-10-20 (17)";
+const BUILD_VERSION = "2026-10-20 (18)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -2001,17 +2001,18 @@ function updateDescTemplate(mode){
         list.push(e);
       } else if (e.until && monthKey >= e.until){
         if (!isGeste) return;
-        /* Le modèle la dit supprimée, or elle est là. Deux cas très différents :
-           - supprimée puis recréée dans le MÊME mois, ou ligne encore vierge
-             -> c'est une vraie recréation : elle repart d'ici.
-           - simple vestige d'un mois déjà rempli, qu'on a conservé parce qu'il porte des
-             montants -> la suppression demandée reste valable, on n'y touche pas. */
-        if (monthKey === e.until || !rowHasFigures(tr, descEl)){
-          e.since = monthKey;
-          e.until = null;
-        } else {
-          return;
-        }
+        /* Le modèle la dit supprimée, or elle est là, au moment d'un geste : c'est que
+           l'utilisatrice a tapé ce nom. Elle repart d'ici, montants compris.
+
+           Avant, une ligne qui portait déjà des montants était prise pour un « vestige »
+           d'une ancienne suppression, et laissée arrêtée. Renommer « Essence » (100 €) en
+           « Coiffeur », supprimé autrefois, faisait alors disparaître la ligne et ses 100 €
+           à la réouverture du mois (« piste 1 », trouvée le 2026-10-04).
+           Un vrai vestige ne peut plus être à l'écran pendant un geste : applyDescriptions
+           (passe 1 ter) retire les lignes arrêtées à chaque ouverture de mois, et la
+           suppression « ce mois-ci et les suivants » les retire aussitôt des mois suivants. */
+        e.since = monthKey;
+        e.until = null;
       } else if (monthKey < (e.since || DAWN)){
         /* La ligne est saisie dans un mois ANTÉRIEUR au début déclaré de l'enveloppe : c'est
            qu'elle existait déjà là, et son début recule d'autant. Sans cela, saisir des
@@ -2683,6 +2684,12 @@ function applyEnvelopeCarryForward(){
 
     if (prev === undefined){
       // premier mois de cette enveloppe : montant de départ saisi à la main
+      /* Si la case contient un report que l'application avait écrit elle-même (lecture seule),
+         ce report n'a plus de source : on le vide. Cas réel : en tapant le nom d'une enveloppe
+         supprimée, lettre par lettre, le report de son ancienne vie s'affichait ; à la fin de
+         la saisie elle renaît de zéro, mais le vieux montant restait et passait pour une saisie.
+         Une valeur tapée à la main (case modifiable) n'est jamais touchée. */
+      if (startIn.readOnly) startIn.value = '';
       startIn.readOnly = false;
       startIn.title = "Premier mois de cette enveloppe : saisis ici ce que tu avais déjà de côté.";
       startIn.classList.remove('derived');
