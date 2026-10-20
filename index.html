@@ -180,9 +180,14 @@ table.budget-table tfoot td{
 }
 .diff-cell.neg, .rowtotal-cell.neg{color:var(--coral);}
 .diff-cell:not(.neg), .rowtotal-cell:not(.neg){color:var(--green);}
-td.rm-cell{border:none; width:28px;}
+td.rm-cell{border:none; width:28px; white-space:nowrap;}
 button.rm-btn{
   background:none; border:none; color:var(--coral); cursor:pointer; font-size:1.1em;
+}
+/* flèches pour ranger une ligne : assez grandes pour un doigt sur la tablette */
+button.mv-btn{
+  background:none; border:none; color:var(--navy); cursor:pointer; font-size:1.1em;
+  padding:2px 4px; min-width:26px;
 }
 button.add-row-btn{
   margin-top:6px; background:var(--sea); color:#fff; border:none; padding:7px 14px;
@@ -1226,7 +1231,7 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-10-04 (16)";
+const BUILD_VERSION = "2026-10-20 (17)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1275,7 +1280,10 @@ function buildRowCells(cfg, prefillDesc){
     <td class="end-balance-cell num" data-value="0">0,00 €</td>
     <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" style="width:0%;"></div></div><span class="mini-gauge-pct">0%</span><span class="threshold-dot dot-none"></span></td>`;
   if (cfg.check)  html += `<td class="check-cell"><input type="checkbox" class="check-in"></td>`;
-  if (cfg.removable) html += `<td class="rm-cell"><button type="button" class="rm-btn" title="Supprimer">✕</button></td>`;
+  if (cfg.removable) html += `<td class="rm-cell">`
+    + `<button type="button" class="mv-btn" data-sens="-1" title="Monter cette ligne">↑</button>`
+    + `<button type="button" class="mv-btn" data-sens="1" title="Descendre cette ligne">↓</button>`
+    + `<button type="button" class="rm-btn" title="Supprimer">✕</button></td>`;
   return html;
 }
 
@@ -1286,6 +1294,9 @@ function addRow(tableId, prefillDesc){
   tr.innerHTML = buildRowCells(cfg, prefillDesc);
   tbody.appendChild(tr);
   if (cfg.removable){
+    tr.querySelectorAll('.mv-btn').forEach(btn => {
+      btn.addEventListener('click', () => deplacerLigne(tableId, tr, Number(btn.dataset.sens)));
+    });
     tr.querySelector('.rm-btn').addEventListener('click', () => {
       /* Une ligne qui porte un nom voyage de mois en mois : on demande donc jusqu'où la
          supprimer. Les mois précédents ne sont jamais touchés, quel que soit le choix. */
@@ -1731,6 +1742,151 @@ function activeTemplateRows(tpl, id, monthKey){
   return templateList(tpl, id).filter(e => isActiveAt(e, monthKey));
 }
 
+/* ---------- L'ordre des lignes ----------
+   Le modèle range ses lignes dans l'ordre où elles ont été CRÉÉES. Ranger les lignes d'un mois
+   (en retapant les noms, faute de mieux) ne changeait donc rien aux autres mois : un mois neuf
+   reprenait l'ordre de création, un mois existant gardait le sien, et chaque ligne ajoutée
+   allait au bout. D'où des catégories qui changeaient de place d'un mois à l'autre.
+
+   Désormais le modèle retient, par tableau, des « rangements » :
+       tpl.ordres['tbl-epargne-ct'] = [ { depuis: '2026-10', liste: ['courses', ...] }, ... ]
+   (noms passés par normDesc). Un mois s'affiche dans l'ordre du dernier rangement fait à ce
+   mois-là ou avant. Ranger un mois vaut pour ce mois et les suivants, jamais pour le passé :
+   c'est la même règle que pour les montants et les suppressions.
+   La clé `ordres` n'est pas un tableau : loadDescTemplate et templateList l'ignorent. */
+function ordreApplicable(tpl, id, monthKey){
+  const rangements = (tpl.ordres && Array.isArray(tpl.ordres[id])) ? tpl.ordres[id] : [];
+  let choisi = null;
+  rangements.forEach(r => { if (r && r.depuis <= monthKey && (!choisi || r.depuis >= choisi.depuis)) choisi = r; });
+  return choisi ? choisi.liste : null;
+}
+
+/* remplacerLaSuite : vrai quand des lignes ont réellement changé de place. Le rangement vaut
+   alors pour ce mois ET les suivants (les rangements plus récents sont effacés). Sinon (un nom
+   ajouté, renommé, retiré) il ne vaut que jusqu'au rangement suivant : modifier un vieux mois ne
+   doit pas défaire l'ordre choisi plus tard. */
+function enregistrerRangement(tpl, id, monthKey, liste, remplacerLaSuite){
+  if (!tpl.ordres || typeof tpl.ordres !== 'object') tpl.ordres = {};
+  const garde = (Array.isArray(tpl.ordres[id]) ? tpl.ordres[id] : [])
+    .filter(r => r && (remplacerLaSuite ? r.depuis < monthKey : r.depuis !== monthKey));
+  garde.push({ depuis: monthKey, liste: liste.slice() });
+  garde.sort((a, b) => a.depuis < b.depuis ? -1 : a.depuis > b.depuis ? 1 : 0);
+  tpl.ordres[id] = garde;
+}
+
+function renommerDansRangements(tpl, id, monthKey, ancien, nouveau){
+  const rangements = (tpl.ordres && Array.isArray(tpl.ordres[id])) ? tpl.ordres[id] : [];
+  rangements.forEach(r => {
+    if (!r || r.depuis < monthKey || !Array.isArray(r.liste)) return;   // le passé garde ses noms
+    const k = r.liste.indexOf(ancien);
+    if (k === -1) return;
+    if (r.liste.indexOf(nouveau) === -1) r.liste[k] = nouveau;
+    else r.liste.splice(k, 1);                 // le nouveau nom y figure déjà : on ne le double pas
+  });
+}
+
+/* L'ordre actuel du mois, complété des noms de la référence absents de ce mois (une ligne
+   retirée « seulement ce mois-ci », par exemple), chacun replacé juste après son prédécesseur.
+   Sans ça, une ligne absente un seul mois reviendrait ensuite tout en bas. */
+function fusionnerOrdre(actuel, reference){
+  const out = actuel.slice();
+  (reference || []).forEach((nom, i) => {
+    if (out.indexOf(nom) !== -1) return;
+    let pos = 0;
+    for (let j = i - 1; j >= 0; j--){
+      const k = out.indexOf(reference[j]);
+      if (k !== -1){ pos = k + 1; break; }   // break : le prédécesseur le plus proche suffit
+    }
+    out.splice(pos, 0, nom);
+  });
+  return out;
+}
+
+/* Les noms des lignes d'un tableau, dans l'ordre affiché, sans doublon. */
+function nomsDansLOrdre(tbody){
+  const out = [];
+  [...tbody.rows].forEach(tr => {
+    const el = tr.querySelector('.desc-in');
+    const key = el ? normDesc(el.value) : '';
+    if (key && out.indexOf(key) === -1) out.push(key);
+  });
+  return out;
+}
+
+/* A-t-on vraiment déplacé des lignes ? On ne compare que les noms présents des deux côtés :
+   ajouter, supprimer ou renommer une ligne ne compte pas comme un rangement. Sans cette
+   précaution, le moindre changement dans un mois ancien imposerait son vieil ordre à la suite. */
+function ordreAChange(avant, apres){
+  if (!avant || !apres) return false;
+  const communs = apres.filter(n => avant.indexOf(n) !== -1);
+  const avantCommuns = avant.filter(n => communs.indexOf(n) !== -1);
+  return communs.join('\n') !== avantCommuns.join('\n');
+}
+
+/* Remet les lignes du tableau dans l'ordre de la liste. Les lignes nommées absentes de la liste
+   (créées après le rangement) suivent, dans leur ordre actuel ; les lignes sans nom vont au bout.
+   Le tri est stable : à rang égal, l'ordre actuel est gardé. */
+function ordonnerLignes(tbody, liste){
+  if (!liste || !liste.length) return;
+  const lignes = [...tbody.rows];
+  const rang = lignes.map((tr, i) => {
+    const el = tr.querySelector('.desc-in');
+    const key = el ? normDesc(el.value) : '';
+    if (!key) return 2000000 + i;
+    const k = liste.indexOf(key);
+    return k !== -1 ? k : 1000000 + i;
+  });
+  const ordre = lignes.map((tr, i) => i).sort((a, b) => rang[a] - rang[b] || a - b);
+  if (ordre.every((v, i) => v === i)) return;           // déjà dans l'ordre : on ne touche à rien
+  ordre.forEach(i => tbody.appendChild(lignes[i]));      // appendChild DÉPLACE une ligne existante
+}
+
+/* Ordre des noms tel qu'affiché à l'ouverture du mois, puis après chaque geste : c'est la
+   référence qui permet de savoir si un geste a déplacé des lignes (voir updateDescTemplate). */
+let ordreAffiche = {};
+
+/* Premier lancement de cette version : aucun rangement n'existe encore. On prend comme
+   référence l'ordre du mois calendaire en cours, s'il est enregistré, à partir de ce mois.
+   C'est le mois que l'utilisatrice vient d'arranger ; les mois suivants s'y aligneront. */
+function initialiserRangements(){
+  const tpl = loadDescTemplate();
+  if (tpl.ordres && typeof tpl.ordres === 'object') return;
+  tpl.ordres = {};
+  const mk = monthKeyFromDate(new Date());
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || 'null'); } catch(e){}
+  if (data && data.tables){
+    DESC_CARRY_TABLES.forEach(id => {
+      const liste = [];
+      (data.tables[id] || []).forEach(rd => {
+        const key = rd && rd.desc ? normDesc(rd.desc) : '';
+        if (key && liste.indexOf(key) === -1) liste.push(key);
+      });
+      if (liste.length) tpl.ordres[id] = [{ depuis: mk, liste }];
+    });
+  }
+  try { localStorage.setItem(DESC_TEMPLATE_KEY, JSON.stringify(tpl)); } catch(e){}
+}
+
+/* Flèches ↑ ↓ : échange la ligne avec sa voisine. Ranger vaut pour ce mois et les suivants :
+   le geste enregistre le nouvel ordre (updateDescTemplate le détecte). */
+function deplacerLigne(tableId, tr, sens){
+  const tbody = tr.parentNode;
+  if (!tbody) return;
+  if (sens < 0){
+    const prec = tr.previousElementSibling;
+    if (!prec) return;
+    tbody.insertBefore(tr, prec);
+  } else {
+    const suiv = tr.nextElementSibling;
+    if (!suiv) return;
+    tbody.insertBefore(suiv, tr);
+  }
+  recalcTable(tableId);
+  saveDescTemplate('geste');
+  saveState();
+}
+
 /* Une ligne "porte des chiffres" dès qu'un de ses champs autre que le libellé est renseigné.
    Sert à deux endroits : ne jamais supprimer automatiquement une saisie réelle, et distinguer
    une ligne fraîchement créée d'un vestige laissé par un mois déjà rempli. */
@@ -1884,6 +2040,27 @@ function updateDescTemplate(mode){
         if (estRetireeIci(id, e.desc)) return;
         e.until = monthKey;
       });
+
+      /* Après chaque geste, l'ordre réel du mois devient son rangement. Si des lignes ont
+         changé de place (flèches, ou noms retapés dans un autre ordre), il vaut aussi pour
+         tous les mois suivants. On ne cherche pas à deviner l'intention à chaque frappe :
+         quand elle retape les noms un à un, les étapes intermédiaires sont bancales (un nom
+         en double, un autre provisoirement absent), mais le dernier geste donne l'ordre final. */
+      const actuel = nomsDansLOrdre(tbody);
+      /* Un renommage sur place (même nombre de noms, un seul qui change) : le nouveau nom
+         prend la place de l'ancien dans les rangements de ce mois et des suivants. Sinon la
+         catégorie renommée partirait en bas de la liste dans les mois suivants. */
+      const avant = ordreAffiche[id];
+      if (avant && avant.length === actuel.length){
+        const ecarts = actuel.map((n, i) => n !== avant[i] ? i : -1).filter(i => i !== -1);
+        if (ecarts.length === 1) renommerDansRangements(tpl, id, monthKey, avant[ecarts[0]], actuel[ecarts[0]]);
+      }
+      if (actuel.length){
+        const reference = ordreApplicable(tpl, id, monthKey) || ordreAffiche[id];
+        enregistrerRangement(tpl, id, monthKey, fusionnerOrdre(actuel, reference),
+                             ordreAChange(reference, actuel));
+      }
+      ordreAffiche[id] = actuel;
     }
 
     /* Une entrée arrêtée le mois même de sa création n'est valable nulle part, mais on la
@@ -2040,6 +2217,10 @@ function applyDescriptions(tpl, options){
         });
       });
     }
+
+    // passe 3 : le dernier rangement valable pour ce mois (voir « L'ordre des lignes »)
+    ordonnerLignes(tbody, ordreApplicable(tpl, id, currentMonth));
+    ordreAffiche[id] = nomsDansLOrdre(tbody);
   });
 }
 
@@ -3221,6 +3402,7 @@ loadMeta();
 /* Avant tout affichage : si ce compte porte des données antérieures à la dernière réparation,
    on la passe ici, automatiquement. C'est ce qui remplace le bouton à cliquer. */
 const bilanMigration = migrerDonnees();
+initialiserRangements();   // une seule fois : l'ordre du mois en cours devient la référence
 buildDefaultRows();
 loadState();
 /* Carnet tout neuf : son premier mois est actif dès l'ouverture. Accueillir quelqu'un par
