@@ -193,6 +193,31 @@ button.add-row-btn{
   margin-top:6px; background:var(--sea); color:#fff; border:none; padding:7px 14px;
   border-radius:6px; cursor:pointer; font-family:inherit;
 }
+/* ---------- Page 9 : calendrier de l'année ---------- */
+.cal-annee{display:flex; align-items:center; justify-content:center; gap:16px; font-size:1.35em; color:var(--navy); font-weight:bold; margin:4px 0 10px;}
+.cal-nav{background:var(--paper); border:1px solid var(--navy); color:var(--navy); border-radius:20px; padding:4px 16px; cursor:pointer; font-size:1em; font-family:inherit;}
+.cal-aide{font-size:.85em; color:var(--navy); opacity:.8; font-style:italic; margin:10px 0 0;}
+.cal-grille{display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap:14px;}
+.cal-grille .card{margin:0;}
+.cal-mois h3{display:flex; justify-content:space-between; align-items:baseline; gap:8px; color:var(--navy); margin:0 0 6px; padding-bottom:4px; border-bottom:2px solid var(--coral);}
+.cal-total-mois{font-size:.85em; white-space:nowrap;}
+.cal-table{width:100%; border-collapse:collapse;}
+.cal-table th{font-size:.75em; color:var(--navy); opacity:.8; text-align:left; font-weight:normal; padding:2px 3px;}
+.cal-table td{padding:3px; border-bottom:1px solid #e3d9bd; vertical-align:middle;}
+.cal-table input[type=text], .cal-table input[type=number]{width:100%; border:none; background:transparent; font-family:inherit; font-size:1em; color:var(--ink, #1d2b36);}
+.cal-table input:focus{outline:2px solid var(--sea-light); border-radius:3px;}
+.cal-table td.cal-c-jour{width:3.2em;} .cal-table td.cal-c-somme{width:6.5em;}
+.cal-table td.cal-c-rec, .cal-table td.cal-c-suppr{width:2em; text-align:center;}
+.cal-table input.cal-somme{text-align:right;}
+.cal-table tr.cal-recurrent{background:rgba(31,111,139,.07);}
+.cal-table tr.cal-a-valider{background:#fde7c8;}
+.cal-table td.cal-c-valider{width:1%; white-space:nowrap;}
+button.cal-valider{display:none; background:#2a7a4f; color:#fff; border:none; border-radius:6px; padding:5px 9px; cursor:pointer; font-family:inherit; font-size:.9em; white-space:nowrap;}
+tr.cal-a-valider button.cal-valider{display:inline-block;}
+.cal-ok{color:#2a7a4f; font-weight:bold; margin-top:6px;}
+.cal-vide{font-style:italic; opacity:.6; font-size:.9em; color:var(--navy); padding:4px 2px;}
+button.cal-ajouter{margin-top:6px; background:var(--sea); color:#fff; border:none; padding:7px 14px; border-radius:6px; cursor:pointer; font-family:inherit;}
+button.cal-suppr{background:none; border:none; color:var(--coral); cursor:pointer; font-size:1.1em;}
 button.add-row-btn:hover{background:var(--navy);}
 
 .summary-box{
@@ -245,8 +270,11 @@ button.mini-btn{
   font-size:.75em; cursor:pointer;
 }
 
+/* En blanc, avec une ombre : sur l'image de fond, le bleu marine ne se lisait pas
+   (demande de Luigi, 2026-11-02). */
 footer{
-  text-align:center; padding:24px; color:var(--navy); font-style:italic; opacity:.8;
+  text-align:center; padding:24px; color:#fff; font-style:italic;
+  text-shadow:0 1px 3px rgba(0,0,0,.75);
 }
 
 /* ---------- SAVES MODAL ---------- */
@@ -294,6 +322,8 @@ footer{
 
 @media print{
   nav.tabs, .toolbar, .add-row-btn, .rm-cell, header.hero .boat-scene, .month-nav, .modal-overlay{display:none !important;}
+  #p9{display:none !important;}   /* le calendrier n'entre pas dans l'impression du carnet mensuel */
+  footer{color:var(--navy) !important; text-shadow:none !important;}   /* du blanc ne se verrait pas sur papier */
   section.page{display:block !important;}
   .card{
     background:#fff !important;
@@ -464,6 +494,7 @@ footer{
   <button data-tab="p6">6. Répartition &amp; Synthèse</button>
   <button data-tab="p7">7. Suivi des Livrets</button>
   <button data-tab="p8">8. Ce mois-ci</button>
+  <button data-tab="p9">9. Calendrier de l'année</button>
 </nav>
 
 <main>
@@ -789,6 +820,26 @@ footer{
   </div>
 </section>
 
+<!-- Page 9 : calendrier des dépenses prévues sur l'année. Volontairement à part du budget
+     mensuel : aucune classe budget-table ni add-row-btn ici, pour ne déclencher aucun des
+     traitements des tableaux de budget. -->
+<section class="page" id="p9">
+  <div class="card">
+    <h2><span class="num-badge">9</span> Calendrier de l'année</h2>
+    <div class="cal-annee">
+      <button type="button" class="cal-nav" id="calAnneePrec" title="Année précédente">‹</button>
+      <span id="calAnnee"></span>
+      <button type="button" class="cal-nav" id="calAnneeSuiv" title="Année suivante">›</button>
+    </div>
+    <div class="flex-row">
+      <label>Total prévu sur l'année :</label>
+      <span class="summary-box" id="calTotalAnnee" style="font-size:1.15em;">0,00 €</span>
+    </div>
+    <p class="cal-aide">Note ici les dépenses que tu vois venir : un anniversaire, l'assurance, les impôts… Coche 🔁 pour qu'un événement revienne tous les ans.</p>
+  </div>
+  <div class="cal-grille" id="calGrille"></div>
+</section>
+
 </main>
 
 <div class="modal-overlay" id="savesModal" hidden>
@@ -803,7 +854,7 @@ footer{
   </div>
 </div>
 
-<footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.7em; opacity:.6;"></span></footer>
+<footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.75em;"></span></footer>
 </div><!-- /#appContent -->
 
 <script>
@@ -1229,9 +1280,11 @@ const META_KEY = "budgetSegala_meta_v1";
 const DATA_PREFIX = "budgetSegala_month_v1_";
 const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
+const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colonne Supabase « calendrier »
+const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-10-20 (18)";
+const BUILD_VERSION = "2026-11-02 (19)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -2732,10 +2785,11 @@ function goToMonth(newKey){
 
 /* ---------- backup / restore ---------- */
 function collectAllAppData(){
-  const out = { meta:null, months:{}, saves:null, descTemplate:null };
+  const out = { meta:null, months:{}, saves:null, descTemplate:null, calendrier:null };
   try { out.meta = localStorage.getItem(META_KEY); } catch(e){}
   try { out.saves = localStorage.getItem(SAVES_KEY); } catch(e){}
   try { out.descTemplate = localStorage.getItem(DESC_TEMPLATE_KEY); } catch(e){}
+  try { out.calendrier = localStorage.getItem(CALENDRIER_KEY); } catch(e){}
   try {
     for (let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
@@ -2761,7 +2815,8 @@ function createSave(name){
     savedAt: new Date().toISOString(),
     meta: data.meta,
     months: data.months,
-    descTemplate: data.descTemplate
+    descTemplate: data.descTemplate,
+    calendrier: data.calendrier
   };
   const list = getSaves();
   list.unshift(entry);
@@ -2778,6 +2833,7 @@ function restoreSave(id){
   try {
     if (entry.meta) localStorage.setItem(META_KEY, entry.meta);
     if (entry.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, entry.descTemplate);
+    restaurerCalendrierDepuis(entry.calendrier);
     Object.entries(entry.months || {}).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e){}
   location.reload();
@@ -3049,6 +3105,7 @@ function importHtmlBackup(){
         if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
         if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
         if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
+        restaurerCalendrierDepuis(payload.calendrier);
         Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
       } catch(e){}
       location.reload();
@@ -3072,8 +3129,464 @@ function trySeedFromEmbeddedData(){
     if (payload.meta) localStorage.setItem(META_KEY, payload.meta);
     if (payload.saves) localStorage.setItem(SAVES_KEY, payload.saves);
     if (payload.descTemplate) localStorage.setItem(DESC_TEMPLATE_KEY, payload.descTemplate);
+    restaurerCalendrierDepuis(payload.calendrier);
     Object.entries(payload.months||{}).forEach(([k,v])=> localStorage.setItem(k, v));
   } catch(e){}
+}
+
+/* Une sauvegarde faite avant le calendrier n'en contient pas : on garde alors le calendrier
+   actuel plutôt que de l'effacer. Sinon, la version restaurée devra repartir vers le compte. */
+function restaurerCalendrierDepuis(texte){
+  if (!texte) return;
+  try {
+    localStorage.setItem(CALENDRIER_KEY, texte);
+    localStorage.setItem(CALENDRIER_A_ENVOYER_KEY, '1');
+  } catch(e){}
+}
+
+/* ---------- Page 9 : calendrier de l'année ----------
+   Les dépenses prévues sur l'année, à part du budget mensuel (aucun lien avec les mois).
+   Données : { ponctuels: [...], recurrents: [...] }, rangées dans le localStorage
+   (CALENDRIER_KEY) et dans la colonne Supabase « calendrier », envoyée séparément du reste.
+
+   - Un événement ponctuel : { id, annee, mois (1 à 12), jour, desc, somme }.
+   - Un événement « tous les ans » : { id, mois, jour, desc, somme, depuis, jusqua, sauf }.
+     Il apparaît chaque année à partir de `depuis`, jusqu'à `jusqua` NON compris (null : sans
+     fin), sauf les années listées dans `sauf`. Le modifier ou le supprimer « seulement cette
+     année » ajoute l'année à `sauf` ; « cette année et les suivantes » coupe la série à cette
+     année. Les années passées ne changent jamais : même règle que pour les montants du budget.
+
+   Les fonctions ci-dessous ne touchent qu'aux données, jamais à l'écran : c'est ce qui permet
+   de les tester directement (tests/calendrier.js). */
+function calendrierVide(){ return { ponctuels: [], recurrents: [] }; }
+
+function lireCalendrier(){
+  let cal;
+  try { cal = JSON.parse(localStorage.getItem(CALENDRIER_KEY) || 'null'); } catch(e){ cal = null; }
+  if (!cal || typeof cal !== 'object') cal = {};
+  // un calendrier abîmé ou incomplet ne doit jamais empêcher la page de s'afficher
+  if (!Array.isArray(cal.ponctuels)) cal.ponctuels = [];
+  if (!Array.isArray(cal.recurrents)) cal.recurrents = [];
+  cal.recurrents.forEach(r => { if (!Array.isArray(r.sauf)) r.sauf = []; });
+  return cal;
+}
+
+function ecrireCalendrier(cal){
+  try {
+    localStorage.setItem(CALENDRIER_KEY, JSON.stringify(cal));
+    // la marque survit à une fermeture de l'app : un envoi raté sera retenté au prochain lancement
+    localStorage.setItem(CALENDRIER_A_ENVOYER_KEY, '1');
+  } catch(e){}
+  if (window.__syncToCloud) window.__syncToCloud();
+}
+
+function nouvelIdCalendrier(){
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function recurrentActif(r, annee){
+  if (!r || annee < r.depuis) return false;
+  if (r.jusqua !== null && r.jusqua !== undefined && annee >= r.jusqua) return false;
+  return (r.sauf || []).indexOf(annee) === -1;
+}
+
+/* Les événements d'un mois, triés par jour (les lignes sans jour à la fin), puis dans l'ordre
+   où ils ont été créés. sort() est stable : à jour égal, l'ordre de création est gardé. */
+function evenementsDuMois(cal, annee, mois){
+  const liste = [];
+  cal.ponctuels.forEach(p => { if (p.annee === annee && p.mois === mois) liste.push({ type: 'p', ev: p }); });
+  cal.recurrents.forEach(r => { if (r.mois === mois && recurrentActif(r, annee)) liste.push({ type: 'r', ev: r }); });
+  const jour = x => { const j = parseInt(x.ev.jour, 10); return isFinite(j) ? j : 99; };
+  return liste.sort((a, b) => jour(a) - jour(b));
+}
+
+function totalDuMois(cal, annee, mois){
+  return evenementsDuMois(cal, annee, mois).reduce((s, x) => s + num(x.ev.somme), 0);
+}
+
+function totalDeLAnnee(cal, annee){
+  let t = 0;
+  for (let m = 1; m <= 12; m++) t += totalDuMois(cal, annee, m);
+  return t;
+}
+
+function trouverCalendrier(liste, id){ return liste.find(x => x.id === id) || null; }
+
+function ajouterPonctuel(cal, annee, mois){
+  const p = { id: nouvelIdCalendrier(), annee, mois, jour: '', desc: '', somme: '' };
+  cal.ponctuels.push(p);
+  return p.id;
+}
+
+function modifierPonctuel(cal, id, champs){
+  const p = trouverCalendrier(cal.ponctuels, id);
+  if (p) Object.assign(p, champs);
+}
+
+function supprimerPonctuel(cal, id){
+  cal.ponctuels = cal.ponctuels.filter(p => p.id !== id);
+}
+
+/* Case 🔁 cochée sur un événement ponctuel : il revient tous les ans à partir de son année. */
+function rendreRecurrent(cal, id){
+  const p = trouverCalendrier(cal.ponctuels, id);
+  if (!p) return null;
+  supprimerPonctuel(cal, id);
+  const r = { id: nouvelIdCalendrier(), mois: p.mois, jour: p.jour, desc: p.desc, somme: p.somme,
+              depuis: p.annee, jusqua: null, sauf: [] };
+  cal.recurrents.push(r);
+  return r.id;
+}
+
+/* Coupe une série « tous les ans » à partir de cette année (les années d'avant la gardent). */
+function couperSerie(cal, r, annee){
+  if (r.depuis >= annee) cal.recurrents = cal.recurrents.filter(x => x !== r);
+  else if (r.jusqua === null || r.jusqua === undefined || r.jusqua > annee) r.jusqua = annee;
+}
+
+/* Case 🔁 décochée : l'événement reste cette année, mais ne revient plus les années suivantes. */
+function arreterRecurrence(cal, id, annee){
+  const r = trouverCalendrier(cal.recurrents, id);
+  if (!r) return null;
+  const p = { id: nouvelIdCalendrier(), annee, mois: r.mois, jour: r.jour, desc: r.desc, somme: r.somme };
+  couperSerie(cal, r, annee);
+  cal.ponctuels.push(p);
+  return p.id;
+}
+
+/* portee : 'annee' (seulement cette année) ou 'suite' (cette année et les suivantes). */
+function modifierRecurrent(cal, id, annee, champs, portee){
+  const r = trouverCalendrier(cal.recurrents, id);
+  if (!r) return;
+  if (portee === 'annee'){
+    // l'année devient une exception, avec sa propre ligne ponctuelle modifiée
+    r.sauf.push(annee);
+    cal.ponctuels.push(Object.assign({ id: nouvelIdCalendrier(), annee, mois: r.mois,
+                                       jour: r.jour, desc: r.desc, somme: r.somme }, champs));
+    return;
+  }
+  if (r.depuis === annee){ Object.assign(r, champs); return; }   // la série commence ici : rien à garder avant
+  // sinon la série se coupe ici, et une nouvelle repart de cette année avec les nouvelles valeurs
+  const suite = Object.assign({}, r, champs, {
+    id: nouvelIdCalendrier(), depuis: annee, sauf: r.sauf.filter(a => a > annee)
+  });
+  r.jusqua = annee;
+  r.sauf = r.sauf.filter(a => a < annee);
+  cal.recurrents.push(suite);
+}
+
+function supprimerRecurrent(cal, id, annee, portee){
+  const r = trouverCalendrier(cal.recurrents, id);
+  if (!r) return;
+  if (portee === 'annee'){ if (r.sauf.indexOf(annee) === -1) r.sauf.push(annee); return; }
+  couperSerie(cal, r, annee);
+}
+
+/* ----- L'écran de la page 9 ----- */
+const NOMS_MOIS_CAL = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+let anneeCalendrier = new Date().getFullYear();
+
+function celluleCal(classe, enfant){
+  const td = document.createElement('td');
+  td.className = classe;
+  if (enfant) td.appendChild(enfant);
+  return td;
+}
+
+function champCal(type, classe, valeur, attrs){
+  const el = document.createElement('input');
+  el.type = type;
+  el.className = classe;
+  if (type === 'checkbox') el.checked = !!valeur; else el.value = valeur === undefined || valeur === null ? '' : valeur;
+  Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+/* Reconstruit toute la page à partir des données. Appelée à l'ouverture de l'onglet, au
+   changement d'année et après chaque changement de structure (ajout, suppression, 🔁).
+   Pas pendant la frappe : reconstruire ferait perdre la case où l'on écrit. */
+function afficherCalendrier(options){
+  const grille = document.getElementById('calGrille');
+  if (!grille) return;
+  /* Les lignes orange (modifiées, pas encore validées) survivent à la reconstruction : ajouter
+     ou supprimer une ligne en avril ne doit pas effacer ce qu'elle tapait en mars. Seul un
+     abandon explicite (changement d'année, bouton « Abandonner ») les oublie. */
+  const enCours = {};
+  if (!(options && options.abandonner)){
+    grille.querySelectorAll('tr.cal-a-valider').forEach(tr => { enCours[tr.dataset.id] = valeursLigneCal(tr); });
+  }
+  const cal = lireCalendrier();
+  document.getElementById('calAnnee').textContent = anneeCalendrier;
+  grille.innerHTML = '';
+  for (let m = 1; m <= 12; m++){
+    const carte = document.createElement('div');
+    carte.className = 'card cal-mois';
+    carte.dataset.mois = m;
+
+    const h3 = document.createElement('h3');
+    const titre = document.createElement('span');
+    titre.textContent = NOMS_MOIS_CAL[m - 1];
+    const total = document.createElement('span');
+    total.className = 'cal-total-mois';
+    h3.appendChild(titre); h3.appendChild(total);
+    carte.appendChild(h3);
+
+    const evenements = evenementsDuMois(cal, anneeCalendrier, m);
+    if (evenements.length){
+      const table = document.createElement('table');
+      table.className = 'cal-table';
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      [['Jour',''], ['Événement',''], ['Somme',''], ['🔁','Tous les ans'], ['',''], ['','']].forEach(([t, titreCol]) => {
+        const th = document.createElement('th');
+        th.textContent = t;
+        if (titreCol) th.title = titreCol;
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      evenements.forEach(({ type, ev }) => {
+        const tr = document.createElement('tr');
+        tr.dataset.id = ev.id;
+        tr.dataset.type = type;
+        if (type === 'r') tr.className = 'cal-recurrent';
+        tr.appendChild(celluleCal('cal-c-jour', champCal('number', 'cal-jour', ev.jour, { min: '1', max: '31', inputmode: 'numeric', placeholder: '–' })));
+        tr.appendChild(celluleCal('cal-c-desc', champCal('text', 'cal-desc', ev.desc, { placeholder: 'Événement' })));
+        tr.appendChild(celluleCal('cal-c-somme', champCal('number', 'cal-somme', ev.somme, { step: '0.01', inputmode: 'decimal', placeholder: '0' })));
+        tr.appendChild(celluleCal('cal-c-rec', champCal('checkbox', 'cal-rec', type === 'r', { title: 'Revient tous les ans' })));
+        // les valeurs enregistrées, pour savoir si la ligne a été modifiée sans être validée
+        tr.dataset.jour = ev.jour || ''; tr.dataset.desc = ev.desc || ''; tr.dataset.somme = ev.somme || '';
+        const valider = document.createElement('button');
+        valider.type = 'button'; valider.className = 'cal-valider'; valider.textContent = '✓ Valider';
+        valider.title = 'Enregistrer cette ligne';
+        tr.appendChild(celluleCal('cal-c-valider', valider));
+        const suppr = document.createElement('button');
+        suppr.type = 'button'; suppr.className = 'cal-suppr'; suppr.title = 'Supprimer'; suppr.textContent = '✕';
+        tr.appendChild(celluleCal('cal-c-suppr', suppr));
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      carte.appendChild(table);
+    } else {
+      const vide = document.createElement('div');
+      vide.className = 'cal-vide';
+      vide.textContent = 'Rien de prévu.';
+      carte.appendChild(vide);
+    }
+
+    const ajout = document.createElement('button');
+    ajout.type = 'button'; ajout.className = 'cal-ajouter'; ajout.textContent = '+ Ajouter';
+    carte.appendChild(ajout);
+    grille.appendChild(carte);
+  }
+  Object.entries(enCours).forEach(([id, v]) => {
+    const tr = grille.querySelector('tr[data-id="' + id + '"]');
+    if (!tr) return;   // ligne disparue (supprimée, ou remplacée par une exception validée)
+    tr.querySelector('.cal-jour').value = v.jour;
+    tr.querySelector('.cal-desc').value = v.desc;
+    tr.querySelector('.cal-somme').value = v.somme;
+    majEtatLigneCal(tr);
+  });
+  majTotauxCalendrier();
+}
+
+/* Les totaux comptent ce qui est ENREGISTRÉ, pas ce qui est à l'écran : une somme tapée mais
+   pas encore validée ne compte pas. Le total qui bouge au moment de « Valider » est la preuve,
+   pour l'utilisatrice, que sa saisie est prise en compte. */
+function majTotauxCalendrier(){
+  const cal = lireCalendrier();
+  document.querySelectorAll('#calGrille .cal-mois').forEach(carte => {
+    const t = totalDuMois(cal, anneeCalendrier, Number(carte.dataset.mois));
+    carte.querySelector('.cal-total-mois').textContent = t ? euro(t) : '';
+  });
+  const tot = document.getElementById('calTotalAnnee');
+  if (tot) tot.textContent = euro(totalDeLAnnee(cal, anneeCalendrier));
+}
+
+/* Une ligne est « à valider » dès qu'une case diffère de ce qui est enregistré. */
+function majEtatLigneCal(tr){
+  const v = valeursLigneCal(tr);
+  const modifiee = v.jour !== tr.dataset.jour || v.desc !== tr.dataset.desc || v.somme !== tr.dataset.somme;
+  tr.classList.toggle('cal-a-valider', modifiee);
+  return modifiee;
+}
+
+function lignesCalAValider(){
+  return document.querySelectorAll('#calGrille tr.cal-a-valider').length;
+}
+
+/* « ✓ Enregistré » quelques secondes dans le cadre du mois, après une validation. */
+function signalerEnregistre(mois){
+  const carte = document.querySelector('#calGrille .cal-mois[data-mois="' + mois + '"]');
+  if (!carte) return;
+  const ok = document.createElement('div');
+  ok.className = 'cal-ok';
+  ok.textContent = '✓ Enregistré';
+  carte.appendChild(ok);
+  setTimeout(() => ok.remove(), 4000);
+}
+
+function valeursLigneCal(tr){
+  return {
+    jour: tr.querySelector('.cal-jour').value,
+    desc: tr.querySelector('.cal-desc').value,
+    somme: tr.querySelector('.cal-somme').value
+  };
+}
+
+/* « ✓ Valider » (ou Entrée) : enregistre la ligne. Un événement « tous les ans » demande
+   d'abord s'il s'agit de cette année seulement ou aussi des suivantes ; « Annuler » laisse la
+   ligne en orange, rien n'est perdu ni enregistré. */
+function validerLigneCal(tr){
+  if (!tr) return;
+  const id = tr.dataset.id;
+  const mois = Number(tr.closest('.cal-mois').dataset.mois);
+  const valeurs = valeursLigneCal(tr);
+  if (tr.dataset.type === 'p'){
+    const cal = lireCalendrier();
+    modifierPonctuel(cal, id, valeurs);
+    ecrireCalendrier(cal);
+    afficherCalendrier();
+    signalerEnregistre(mois);
+    return;
+  }
+  const annee = anneeCalendrier;
+  demanderChoix('« ' + (valeurs.desc.trim() || 'Événement') + ' » revient tous les ans',
+    'Ce changement vaut :', 'Les années précédentes ne changent pas.', [
+      { cle: 'annee',   texte: 'Seulement pour ' + annee },
+      { cle: 'suite',   texte: 'Pour ' + annee + ' et les années suivantes', principal: true },
+      { cle: 'annuler', texte: 'Annuler', discret: true }
+    ]).then(choix => {
+      if (choix !== 'annee' && choix !== 'suite') return;
+      const cal = lireCalendrier();
+      modifierRecurrent(cal, id, annee, valeurs, choix);
+      ecrireCalendrier(cal);
+      tr.classList.remove('cal-a-valider');
+      afficherCalendrier();
+      signalerEnregistre(mois);
+    });
+}
+
+function brancherCalendrier(){
+  const grille = document.getElementById('calGrille');
+  if (!grille) return;
+
+  /* Changer d'année reconstruit la page : avec des lignes orange, on prévient d'abord. */
+  const changerAnnee = sens => {
+    const n = lignesCalAValider();
+    if (!n){ anneeCalendrier += sens; afficherCalendrier(); return; }
+    demanderChoix('Ligne' + (n > 1 ? 's' : '') + ' pas encore validée' + (n > 1 ? 's' : ''),
+      (n > 1 ? n + ' lignes en orange ne sont pas enregistrées.' : 'Une ligne en orange n\'est pas enregistrée.'),
+      'Touche « ✓ Valider » sur chaque ligne orange pour l\'enregistrer.', [
+        { cle: 'rester',     texte: 'Revenir pour les valider', principal: true },
+        { cle: 'abandonner', texte: 'Abandonner ces changements', discret: true }
+      ]).then(choix => {
+        if (choix !== 'abandonner') return;
+        anneeCalendrier += sens;
+        afficherCalendrier({ abandonner: true });
+      });
+  };
+  document.getElementById('calAnneePrec').addEventListener('click', () => changerAnnee(-1));
+  document.getElementById('calAnneeSuiv').addEventListener('click', () => changerAnnee(1));
+  const onglet = document.querySelector('nav.tabs button[data-tab="p9"]');
+  if (onglet) onglet.addEventListener('click', () => afficherCalendrier());   // garde les lignes orange
+
+  // fermer la page avec des lignes orange : le navigateur demande confirmation
+  window.addEventListener('beforeunload', e => {
+    if (!lignesCalAValider()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  // Frappe : rien n'est enregistré ; la ligne passe en orange et « ✓ Valider » apparaît.
+  grille.addEventListener('input', e => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr || e.target.classList.contains('cal-rec')) return;
+    majEtatLigneCal(tr);
+  });
+
+  // Entrée dans une case d'une ligne orange : comme « ✓ Valider »
+  grille.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const tr = e.target.closest('tr.cal-a-valider');
+    if (!tr) return;
+    e.preventDefault();
+    validerLigneCal(tr);
+  });
+
+  // Case 🔁 : agit tout de suite (et enregistre au passage une ligne ponctuelle modifiée)
+  grille.addEventListener('change', e => {
+    if (!e.target.classList.contains('cal-rec')) return;
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const id = tr.dataset.id;
+    if (tr.dataset.type === 'r' && tr.classList.contains('cal-a-valider')){
+      // décocher une série modifiée mais pas validée : on ne devine pas quelle valeur garder
+      e.target.checked = true;
+      demanderChoix('Ligne pas encore validée', 'Valide d\'abord ta modification (bouton « ✓ Valider »), puis décoche 🔁.', '',
+        [{ cle: 'ok', texte: 'Compris', principal: true }]);
+      return;
+    }
+    const mois = Number(tr.closest('.cal-mois').dataset.mois);   // lu avant de reconstruire la page
+    const cal = lireCalendrier();
+    if (tr.dataset.type === 'p'){
+      modifierPonctuel(cal, id, valeursLigneCal(tr));
+      rendreRecurrent(cal, id);
+    } else {
+      arreterRecurrence(cal, id, anneeCalendrier);
+    }
+    ecrireCalendrier(cal);
+    tr.classList.remove('cal-a-valider');   // ses valeurs viennent d'être enregistrées
+    afficherCalendrier();
+    signalerEnregistre(mois);
+  });
+
+  grille.addEventListener('click', e => {
+    const valider = e.target.closest('.cal-valider');
+    if (valider){ validerLigneCal(valider.closest('tr[data-id]')); return; }
+
+    const ajout = e.target.closest('.cal-ajouter');
+    if (ajout){
+      const mois = Number(ajout.closest('.cal-mois').dataset.mois);
+      const cal = lireCalendrier();
+      const id = ajouterPonctuel(cal, anneeCalendrier, mois);
+      ecrireCalendrier(cal);
+      afficherCalendrier();
+      const champ = document.querySelector('#calGrille tr[data-id="' + id + '"] .cal-desc');
+      if (champ) champ.focus();
+      return;
+    }
+    const suppr = e.target.closest('.cal-suppr');
+    if (!suppr) return;
+    const tr = suppr.closest('tr[data-id]');
+    const id = tr.dataset.id;
+    const desc = tr.querySelector('.cal-desc').value.trim() || 'cet événement';
+    const annee = anneeCalendrier;
+    if (tr.dataset.type === 'p'){
+      const v = valeursLigneCal(tr);
+      const vide = !v.desc.trim() && !v.somme.trim() && !v.jour.trim();
+      const supprimer = () => { const cal = lireCalendrier(); supprimerPonctuel(cal, id); ecrireCalendrier(cal); afficherCalendrier(); };
+      if (vide){ supprimer(); return; }
+      demanderChoix('Supprimer « ' + desc + ' »', 'Tu veux supprimer cet événement ?', '', [
+        { cle: 'oui', texte: 'Supprimer', principal: true },
+        { cle: 'annuler', texte: 'Annuler', discret: true }
+      ]).then(choix => { if (choix === 'oui') supprimer(); });
+      return;
+    }
+    demanderChoix('Supprimer « ' + desc + ' »', 'Cet événement revient tous les ans. Tu veux le supprimer :',
+      'Les années précédentes ne changent pas.', [
+        { cle: 'annee',   texte: 'Seulement pour ' + annee },
+        { cle: 'suite',   texte: 'Pour ' + annee + ' et les années suivantes', principal: true },
+        { cle: 'annuler', texte: 'Annuler, ne rien supprimer', discret: true }
+      ]).then(choix => {
+        if (choix !== 'annee' && choix !== 'suite') return;
+        const cal = lireCalendrier();
+        supprimerRecurrent(cal, id, annee, choix);
+        ecrireCalendrier(cal);
+        afficherCalendrier();
+      });
+  });
 }
 
 /* ---------- save / load ---------- */
@@ -3425,6 +3938,8 @@ recalcAll();
 majBandeauMois();
 populateMonthYearSelects();
 updateMonthIndicator();
+brancherCalendrier();
+afficherCalendrier();
 
 if (bilanMigration && bilanMigration.corriges){
   showDataBanner('✓ Tes données ont été mises à jour automatiquement — '
@@ -3658,6 +4173,8 @@ const LS_META = "budgetSegala_meta_v1";
 const LS_MONTH_PREFIX = "budgetSegala_month_v1_";
 const LS_SAVES = "budgetSegala_saves_v1";
 const LS_DESC_TEMPLATE = "budgetSegala_descTemplate_v1";
+const LS_CALENDRIER = "budgetSegala_calendrier_v1";
+const LS_CALENDRIER_A_ENVOYER = "budgetSegala_calendrier_aEnvoyer";
 
 function safeParse(raw, fallback){
   if (!raw) return fallback;
@@ -3699,6 +4216,15 @@ async function pullFromCloud(user){
     if (settingsRow.meta) localStorage.setItem(LS_META, JSON.stringify(settingsRow.meta));
     if (settingsRow.desc_template) localStorage.setItem(LS_DESC_TEMPLATE, JSON.stringify(settingsRow.desc_template));
     if (settingsRow.saves) localStorage.setItem(LS_SAVES, JSON.stringify(settingsRow.saves));
+    /* Calendrier : le compte fait foi, SAUF si cet appareil a des changements pas encore
+       envoyés (envoi raté, app fermée trop tôt) — on les garde, ils partiront juste après.
+       Un calendrier vide côté compte ({} : jamais rempli) n'écrase pas non plus celui de
+       l'appareil. */
+    const enAttente = localStorage.getItem(LS_CALENDRIER_A_ENVOYER) === '1';
+    const enLigne = settingsRow.calendrier;
+    if (!enAttente && enLigne && typeof enLigne === 'object' && Object.keys(enLigne).length){
+      localStorage.setItem(LS_CALENDRIER, JSON.stringify(enLigne));
+    }
   }
   const { data: monthRows } = await supabase.from('budget_months').select('*').eq('user_id', user.id);
   (monthRows || []).forEach(row => {
@@ -3771,6 +4297,27 @@ async function pushToCloud(){
     setSyncState('⚠ sauvegarde en attente');
     console.warn('Synchronisation Supabase échouée :', e);
   }
+  await pushCalendrier(user);
+}
+
+/* Le calendrier part à part, dans son propre try : s'il échouait (colonne absente, par
+   exemple), l'enregistrement des budgets ci-dessus n'en serait pas affecté. `update` et non
+   `upsert` : la ligne de réglages existe déjà (pushSettings vient de l'écrire), et on ne
+   touche qu'à cette colonne. La marque « à envoyer » n'est levée qu'après un succès. */
+async function pushCalendrier(user){
+  if (localStorage.getItem(LS_CALENDRIER_A_ENVOYER) !== '1') return;
+  const envoye = localStorage.getItem(LS_CALENDRIER);
+  try {
+    const { error } = await supabase.from('budget_settings')
+      .update({ calendrier: safeParse(envoye, {}) })
+      .eq('user_id', user.id);
+    if (error) throw error;
+    // si elle a encore tapé pendant l'envoi, la marque reste : la nouvelle version partira ensuite
+    if (localStorage.getItem(LS_CALENDRIER) === envoye) localStorage.removeItem(LS_CALENDRIER_A_ENVOYER);
+  } catch(e){
+    setSyncState('⚠ sauvegarde en attente');
+    console.warn('Envoi du calendrier échoué :', e);
+  }
 }
 
 function scheduleSyncToCloud(){
@@ -3838,6 +4385,8 @@ async function bootstrapSession(user){
     enAttente.length = 0;
     scheduleSyncToCloud();
   }
+  // un calendrier modifié lors d'une session précédente, pas encore arrivé dans le compte
+  if (localStorage.getItem(LS_CALENDRIER_A_ENVOYER) === '1') scheduleSyncToCloud();
 
   try {
     const migrated = sessionStorage.getItem('justMigrated');
