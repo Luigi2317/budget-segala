@@ -601,13 +601,6 @@ footer{
     <button type="button" class="add-row-btn" data-table="tbl-charges-var">+ Ajouter une ligne</button>
   </div>
 
-  <div class="card">
-    <div class="flex-row">
-      <label>Reste à épargner (restant du salaire) :</label>
-      <span class="summary-box" id="restantSalaireBox" data-value="0">0,00 €</span>
-    </div>
-    <p class="cal-aide">Revenus − crédits − charges fixes − charges variables − montants des enveloppes (page 4).</p>
-  </div>
 </section>
 
 <!-- ===================== PAGE 4 ===================== -->
@@ -626,6 +619,16 @@ footer{
       <label>Fin du mois, combien me reste-t-il ?</label>
       <span class="summary-box" id="envFinDeMois" data-value="0" style="font-size:1.15em;">0,00 €</span>
     </div>
+  </div>
+
+  <!-- En bas de la page 4 et non plus en page 3 (demande de Maman, 2026-11-12) : il déduit les
+       enveloppes, et c'est le montant qui sert à remplir la page 5 (épargnes). -->
+  <div class="card">
+    <div class="flex-row">
+      <label>Reste à épargner (restant du salaire) :</label>
+      <span class="summary-box" id="restantSalaireBox" data-value="0" style="font-size:1.15em;">0,00 €</span>
+    </div>
+    <p class="cal-aide">Revenus − crédits − charges fixes − charges variables − montants des enveloppes. C'est ce montant que tu répartis dans tes épargnes (page 5).</p>
   </div>
 
   <!-- Les tableaux d'avant (2026-11-12) restent dans la page, CACHÉS : leurs données continuent
@@ -726,14 +729,24 @@ footer{
     <h3 style="color:var(--navy); margin-top:24px;">Épargnes long terme</h3>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-epargne-lt">
-        <thead><tr><th>Description</th><th>Montant</th><th>✓</th><th></th></tr></thead>
+        <thead><tr>
+          <th>Description</th><th>Objectif</th><th>Déjà épargné</th>
+          <th>Dépôt<br>ce mois</th><th>Retrait<br>ce mois</th><th>Montant total</th>
+          <th>Progression</th><th>✓</th><th hidden></th><th></th>
+        </tr></thead>
         <tbody></tbody>
         <tfoot><tr><td>Total</td>
-          <td id="tbl-epargne-lt-tot-montant" class="num" data-value="0">0,00 €</td>
-          <td>—</td><td></td></tr></tfoot>
+          <td id="tbl-epargne-lt-tot-objectif" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-start" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-depot" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-retrait" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-end" class="num" data-value="0">0,00 €</td>
+          <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" id="tbl-epargne-lt-tot-progress-fill" style="width:0%;"></div></div><span class="mini-gauge-pct" id="tbl-epargne-lt-tot-progress-pct">0%</span></td>
+          <td>—</td><td hidden></td><td></td></tr></tfoot>
       </table>
     </div>
     <button type="button" class="add-row-btn" data-table="tbl-epargne-lt">+ Ajouter</button>
+    <span id="tbl-epargne-lt-tot-netmovement" data-value="0" style="display:none;"></span>
 
     <h3 style="color:var(--navy); margin-top:20px;">Défis</h3>
     <div class="table-scroll">
@@ -817,7 +830,7 @@ footer{
         <h3>Long Terme</h3>
         <div class="livret-row"><label>Solde début</label><input type="number" step="0.01" id="livretLT-debut" class="standalone"></div>
         <div class="livret-row"><label>+ Épargnes</label><input type="number" step="0.01" id="livretLT-epargne" class="standalone">
-          <button type="button" class="mini-btn" data-fill="livretLT-epargne" data-source="tbl-epargne-lt-tot-montant">↻ total</button></div>
+          <button type="button" class="mini-btn" data-fill="livretLT-epargne" data-source="tbl-epargne-lt-tot-netmovement">↻ total</button></div>
         <div class="livret-row"><label>− Dépenses</label><input type="number" step="0.01" id="livretLT-depense" class="standalone"></div>
         <div class="livret-row"><label>= Solde fin</label><span class="fin-box" id="livretLT-fin" data-value="0">0,00 €</span></div>
       </div>
@@ -1320,7 +1333,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-12 (20)";
+const BUILD_VERSION = "2026-11-12 (22)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1347,7 +1360,9 @@ const ADDABLE_TABLES = {
   'tbl-depenses-semaine': { desc:true, weeks:true, rowTotal:true, removable:true },
   'tbl-economies-semaine':{ desc:true, weeks:true, rowTotal:true, removable:true },
   'tbl-epargne-ct':       { desc:true, objectif:true, envelopeBalance:true, check:true, removable:true },
-  'tbl-epargne-lt':       { desc:true, montant:true, check:true, removable:true },
+  // depuis le 2026-11-12, comme le court terme ; l'ancienne colonne Montant reste dans une case
+  // cachée (montantCache) pour que les montants déjà saisis restent enregistrés
+  'tbl-epargne-lt':       { desc:true, objectif:true, envelopeBalance:true, check:true, removable:true, montantCache:true },
   'tbl-defis':            { desc:true, montant:true, check:true, removable:true }
 };
 
@@ -1369,6 +1384,7 @@ function buildRowCells(cfg, prefillDesc){
     <td class="end-balance-cell num" data-value="0">0,00 €</td>
     <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" style="width:0%;"></div></div><span class="mini-gauge-pct">0%</span><span class="threshold-dot dot-none"></span></td>`;
   if (cfg.check)  html += `<td class="check-cell"><input type="checkbox" class="check-in"></td>`;
+  if (cfg.montantCache) html += `<td hidden><input type="number" step="0.01" class="num montant-in"></td>`;
   if (cfg.removable) html += `<td class="rm-cell">`
     + `<button type="button" class="mv-btn" data-sens="-1" title="Monter cette ligne">↑</button>`
     + `<button type="button" class="mv-btn" data-sens="1" title="Descendre cette ligne">↓</button>`
@@ -1759,7 +1775,7 @@ function updateMonthIndicator(){
 const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var',
   'tbl-enveloppes','tbl-depenses-semaine','tbl-economies-semaine','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
 const DEFAULT_DESCRIPTIONS = { 'tbl-enveloppes': CATEGORIES, 'tbl-depenses-semaine': CATEGORIES };
-const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-enveloppes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'] };
+const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-enveloppes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'], 'tbl-epargne-lt': ['objectif','depot'] };
 
 const DAWN = '0000-00'; // "a toujours existé"
 
@@ -2297,6 +2313,7 @@ function applyDescriptions(tpl, options){
       const repris = previousFieldValues(id, extraFields, currentMonth);
       [...tbody.rows].forEach(tr=>{
         if (nouvellesSeulement && !nouvelles.has(tr)) return;
+        if (tr.dataset && tr.dataset.repriseLt) return;   // ancien long terme repris tel quel
         const descEl = tr.querySelector('.desc-in');
         const match = descEl && repris[normDesc(descEl.value)];
         if (!match) return;
@@ -2381,17 +2398,33 @@ function rowEndBalance(rd){
 /* Premier mois d'existence de chaque enveloppe, d'après le modèle daté. Une enveloppe
    supprimée puis recréée repart de sa recréation : son "Déjà épargné" redevient saisissable
    au lieu d'hériter, à son insu, du solde qu'elle portait dans sa vie précédente. */
-function envelopeSinceMap(){
+/* Les tableaux qui fonctionnent « en enveloppe » (déjà épargné + dépôt − retrait = total,
+   reporté de mois en mois) : le court terme depuis toujours, le long terme depuis le
+   2026-11-12 (demande de Maman : la même chose qu'en court terme). Un seul mécanisme pour les
+   deux : le long terme profite de toutes les corrections faites sur le court terme. */
+const ENVELOPE_TABLES = ['tbl-epargne-ct', 'tbl-epargne-lt'];
+
+function envelopeSinceMap(tableId){
   const out = {};
-  templateList(loadDescTemplate(), 'tbl-epargne-ct').forEach(e=>{
+  templateList(loadDescTemplate(), tableId || 'tbl-epargne-ct').forEach(e=>{
     if (e && e.desc && e.desc.trim()) out[normDesc(e.desc)] = e.since || DAWN;
   });
   return out;
 }
 
-function previousEnvelopeBalances(beforeMonthKey){
+/* Le long terme n'avait qu'une colonne « Montant » : c'était le versement du mois. Un mois
+   enregistré avant le 2026-11-12, jamais rouvert depuis, n'a pas encore de « Dépôt » : on lit
+   alors son Montant à la place, pour que le report ne l'oublie pas. Une fois le mois rouvert et
+   enregistré, le Dépôt existe et c'est lui qui compte (même vide). */
+function depotEnregistre(rd){
+  if (rd.depot !== undefined) return rd.depot;
+  return rd.montant !== undefined ? rd.montant : undefined;
+}
+
+function previousEnvelopeBalances(beforeMonthKey, tableId){
+  tableId = tableId || 'tbl-epargne-ct';
   const result = {};
-  const sinceByEnvelope = envelopeSinceMap();
+  const sinceByEnvelope = envelopeSinceMap(tableId);
   const earlierMonths = [];
   try {
     for (let i = 0; i < localStorage.length; i++){
@@ -2423,11 +2456,12 @@ function previousEnvelopeBalances(beforeMonthKey){
     let rows = [];
     try {
       const data = JSON.parse(localStorage.getItem(DATA_PREFIX + mk) || '{}');
-      rows = (data.tables && data.tables['tbl-epargne-ct']) || [];
+      rows = (data.tables && data.tables[tableId]) || [];
     } catch(e){ return; }
 
-    rows.forEach(rd => {
-      if (!rd || !rd.desc || !String(rd.desc).trim()) return;
+    rows.forEach(brut => {
+      if (!brut || !brut.desc || !String(brut.desc).trim()) return;
+      const rd = Object.assign({}, brut, { depot: depotEnregistre(brut) });
       const key = normDesc(rd.desc);
       if (mk < (sinceByEnvelope[key] || DAWN)) return; // antérieur à la création de l'enveloppe
       const hasData = (rd.startBalance !== undefined && rd.startBalance !== '')
@@ -2760,9 +2794,17 @@ function rafraichirMoisAffiche(){
   majBandeauMois();
 }
 
+/* Applique le report aux deux tableaux d'épargne (court et long terme), chacun avec son propre
+   historique : un même nom dans les deux tableaux reste deux épargnes distinctes. */
 function applyEnvelopeCarryForward(){
-  const prevBalances = previousEnvelopeBalances(currentMonth);
-  const tbody = document.getElementById('tbl-epargne-ct').tBodies[0];
+  ENVELOPE_TABLES.forEach(appliquerReportEnveloppes);
+}
+
+function appliquerReportEnveloppes(tableId){
+  const prevBalances = previousEnvelopeBalances(currentMonth, tableId);
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const tbody = table.tBodies[0];
   [...tbody.rows].forEach(tr=>{
     const descIn = tr.querySelector('.desc-in');
     const startIn = tr.querySelector('.start-balance-in');
@@ -3043,16 +3085,15 @@ function generatePdf(){
       const t = pdfEnveloppes();
       addTitle(sec.title, 13);
       addTable(t.headers, t.rows);
-      addKeyValueTable('Résumé', [['Fin du mois, combien me reste-t-il ?', document.getElementById('envFinDeMois').textContent.trim()]]);
+      addKeyValueTable('Résumé', [
+        ['Fin du mois, combien me reste-t-il ?', document.getElementById('envFinDeMois').textContent.trim()],
+        ['Reste à épargner (restant du salaire)', document.getElementById('restantSalaireBox').textContent.trim()]
+      ]);
       return;
     }
     const { headers, keys } = pdfColumnsForTable(sec.tableId);
     addTitle(sec.title, 13);
     addTable(headers, pdfTableRows(sec.tableId, keys));
-
-    if (sec.tableId === 'tbl-charges-var'){
-      addKeyValueTable('Résumé', [['Reste à épargner (restant du salaire)', document.getElementById('restantSalaireBox').textContent.trim()]]);
-    }
     if (sec.tableId === 'tbl-defis'){
       const reste = document.getElementById('resteCompte').value;
       addKeyValueTable('Résumé', [['Reste sur le compte', reste !== '' ? euro(num(reste)) : '—']]);
@@ -3721,6 +3762,33 @@ function reprendreAnciennesDepenses(data){
   });
 }
 
+/* Reprise unique des Épargnes long terme d'avant le 2026-11-12 : leur seule colonne « Montant »
+   était le versement du mois (diagnostic et réponse de Maman). Pour une ligne enregistrée sans
+   « Dépôt » (ancien format), le Montant devient le Dépôt de ce mois. Dès que le mois est
+   enregistré, le Dépôt existe : la reprise ne se refait plus. Le Montant reste enregistré,
+   dans une case cachée, comme avant. */
+function reprendreMontantsLongTerme(data){
+  const rows = (data && data.tables && data.tables['tbl-epargne-lt']) || [];
+  const tbody = document.getElementById('tbl-epargne-lt').tBodies[0];
+  rows.forEach((rd, i) => {
+    if (!rd || rd.depot !== undefined) return;           // déjà au nouveau format
+    /* Seulement une épargne qui avait déjà un nom. Une ligne VIERGE n'a rien à protéger : c'est
+       elle que l'ouverture du mois remplit avec une épargne créée depuis, qui doit recevoir son
+       objectif et son dépôt habituels (défaut trouvé à la recette de Luigi : objectif perdu). */
+    if (!rd.desc || !String(rd.desc).trim()) return;
+    const tr = tbody.rows[i];
+    if (!tr) return;
+    /* Marque « reprise » : à cette ouverture, le report automatique ne doit pas remplir cette
+       ligne. Un mois où Maman n'avait RIEN versé recevrait sinon le versement du mois d'avant.
+       La ligne garde exactement ce qu'elle contenait ; la marque n'est pas enregistrée. */
+    if (tr.dataset) tr.dataset.repriseLt = '1';
+    const montant = rd.montant === undefined || rd.montant === null ? '' : String(rd.montant);
+    if (montant.trim() === '') return;
+    const depotIn = tr.querySelector('.depot-in');
+    if (depotIn) depotIn.value = montant;
+  });
+}
+
 /* ----- L'écran de la page 4 ----- */
 let lignesEnveloppesAffichees = [];   // colonne i du tableau visible = ligne cachée i
 
@@ -4057,6 +4125,7 @@ function loadState(){
     [...tbody.rows].forEach((tr,i)=> restoreRow(tr, rows[i]));
   });
   reprendreAnciennesDepenses(data);
+  reprendreMontantsLongTerme(data);
 
   Object.entries(data.standalone||{}).forEach(([id,v])=>{
     const el = document.getElementById(id);
@@ -4079,7 +4148,7 @@ document.addEventListener('input', e=>{
   const table = e.target.closest('table.budget-table');
   if (table){
     // renommer/saisir une enveloppe change le solde à reporter : on le réévalue aussitôt
-    if (table.id === 'tbl-epargne-ct' && e.target.matches('.desc-in')) applyEnvelopeCarryForward();
+    if (ENVELOPE_TABLES.indexOf(table.id) !== -1 && e.target.matches('.desc-in')) applyEnvelopeCarryForward();
     recalcTable(table.id);
     updateDerived();
     saveState();
@@ -4147,7 +4216,7 @@ document.addEventListener('change', e=>{
 
   if (e.target.matches('.desc-in')){
     saveDescTemplate('geste');
-    if (table.id === 'tbl-epargne-ct') applyEnvelopeCarryForward();
+    if (ENVELOPE_TABLES.indexOf(table.id) !== -1) applyEnvelopeCarryForward();
     recalcTable(table.id);
     saveState();
     return;
@@ -4187,7 +4256,7 @@ document.addEventListener('click', e=>{
   const addBtn = e.target.closest('.add-row-btn');
   if (addBtn){
     addRow(addBtn.dataset.table);
-    if (addBtn.dataset.table === 'tbl-epargne-ct') applyEnvelopeCarryForward();
+    if (ENVELOPE_TABLES.indexOf(addBtn.dataset.table) !== -1) applyEnvelopeCarryForward();
     recalcTable(addBtn.dataset.table);
     saveState();
     return;
