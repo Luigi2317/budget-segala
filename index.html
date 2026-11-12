@@ -193,6 +193,28 @@ button.add-row-btn{
   margin-top:6px; background:var(--sea); color:#fff; border:none; padding:7px 14px;
   border-radius:6px; cursor:pointer; font-family:inherit;
 }
+/* ---------- Page 4 : enveloppes semaine par semaine ---------- */
+.env-grille{border-collapse:collapse; min-width:100%;}
+.env-grille th, .env-grille td{border:1px solid #e3d9bd; padding:4px 5px; text-align:center; vertical-align:middle;}
+.env-grille tbody th{text-align:left; color:var(--navy); font-weight:normal; white-space:nowrap; background:#f7efe0;}
+.env-grille .env-coin{background:transparent; border:none;}
+.env-grille .env-tete{background:#0b3d59; min-width:7.5em;}
+.env-grille input{width:100%; min-width:5.5em; border:none; background:transparent; font-family:inherit; font-size:1em; text-align:center;}
+.env-grille input:focus{outline:2px solid var(--sea-light); border-radius:3px;}
+.env-grille input.env-nom{color:#fff; font-weight:bold;}
+.env-grille input.env-nom::placeholder{color:rgba(255,255,255,.6);}
+.env-actions{display:flex; justify-content:center; gap:2px; margin-top:2px;}
+.env-actions button{background:none; border:none; color:#cfe8f0; cursor:pointer; font-size:1em; padding:2px 6px; min-width:26px;}
+.env-actions button.env-suppr{color:#f3a98f;}
+.env-l-montant td, .env-l-montant th{background:#fbeee2; font-weight:bold;}
+.env-l-restant td{color:var(--green); font-style:italic;}
+.env-l-economies th, .env-l-economies td{font-weight:bold; border-top:2px solid var(--coral);}
+.env-grille td.neg{color:var(--coral);}
+.env-semaine{display:block; font-weight:bold;}
+.env-sous-titre{display:block; font-size:.8em; opacity:.8;}
+.env-vide{font-style:italic; opacity:.7; color:var(--navy); border:none !important;}
+.env-boutons{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+
 /* ---------- Page 9 : calendrier de l'année ---------- */
 .cal-annee{display:flex; align-items:center; justify-content:center; gap:16px; font-size:1.35em; color:var(--navy); font-weight:bold; margin:4px 0 10px;}
 .cal-nav{background:var(--paper); border:1px solid var(--navy); color:var(--navy); border-radius:20px; padding:4px 16px; cursor:pointer; font-size:1em; font-family:inherit;}
@@ -488,8 +510,8 @@ footer{
 <nav class="tabs" id="tabNav">
   <button data-tab="p1" class="active">1. Revenus &amp; Dettes</button>
   <button data-tab="p2">2. Charges Fixes</button>
-  <button data-tab="p3">3. Charges Variables &amp; Enveloppes</button>
-  <button data-tab="p4">4. Suivi Hebdo &amp; Économies</button>
+  <button data-tab="p3">3. Charges Variables</button>
+  <button data-tab="p4">4. Enveloppes</button>
   <button data-tab="p5">5. Épargnes &amp; Défis</button>
   <button data-tab="p6">6. Répartition &amp; Synthèse</button>
   <button data-tab="p7">7. Suivi des Livrets</button>
@@ -580,7 +602,39 @@ footer{
   </div>
 
   <div class="card">
-    <h2>Enveloppes</h2>
+    <div class="flex-row">
+      <label>Reste à épargner (restant du salaire) :</label>
+      <span class="summary-box" id="restantSalaireBox" data-value="0">0,00 €</span>
+    </div>
+    <p class="cal-aide">Revenus − crédits − charges fixes − charges variables − montants des enveloppes (page 4).</p>
+  </div>
+</section>
+
+<!-- ===================== PAGE 4 ===================== -->
+<section class="page" id="p4">
+  <div class="card">
+    <h2><span class="num-badge">4</span> Enveloppes</h2>
+    <p class="cal-aide" style="margin:0 0 10px;">Chaque semaine, note ta dépense : le restant de l'enveloppe se calcule tout seul. Ce qui reste à la fin du mois, ce sont tes économies.</p>
+    <div class="table-scroll">
+      <table class="env-grille" id="envGrille"></table>
+    </div>
+    <div class="env-boutons">
+      <button type="button" class="cal-ajouter" id="envAjouter">+ Ajouter une enveloppe</button>
+      <button type="button" class="cal-ajouter" id="envAjouterSemaine">+ Ajouter une semaine</button>
+    </div>
+    <div class="flex-row" style="margin-top:18px;">
+      <label>Fin du mois, combien me reste-t-il ?</label>
+      <span class="summary-box" id="envFinDeMois" data-value="0" style="font-size:1.15em;">0,00 €</span>
+    </div>
+  </div>
+
+  <!-- Les tableaux d'avant (2026-11-12) restent dans la page, CACHÉS : leurs données continuent
+       d'être lues et enregistrées avec le mois, rien n'est effacé.
+       - tbl-enveloppes reste la vraie liste des enveloppes (nom, montant par mois, ordre,
+         suppressions, report) ; le tableau ci-dessus l'affiche et la modifie (voir « Page 4 »
+         dans le script). Ses colonnes S1 à S5 gardent les prévisions de Maman.
+       - « Dépenses hebdomadaires » et « Économies » : remplacés par le tableau ci-dessus. -->
+  <div hidden>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-enveloppes">
         <thead><tr><th>Description</th><th>Budget</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th></th></tr></thead>
@@ -599,17 +653,6 @@ footer{
     </div>
     <button type="button" class="add-row-btn" data-table="tbl-enveloppes">+ Ajouter une ligne</button>
 
-    <div class="flex-row" style="margin-top:18px;">
-      <label>Reste à épargner (restant du salaire) :</label>
-      <span class="summary-box" id="restantSalaireBox" data-value="0">0,00 €</span>
-    </div>
-  </div>
-</section>
-
-<!-- ===================== PAGE 4 ===================== -->
-<section class="page" id="p4">
-  <div class="card">
-    <h2><span class="num-badge">4</span> Dépenses hebdomadaires (enveloppes)</h2>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-depenses-semaine">
         <thead><tr><th>Dépenses</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>Total</th><th></th></tr></thead>
@@ -627,10 +670,7 @@ footer{
       </table>
     </div>
     <button type="button" class="add-row-btn" data-table="tbl-depenses-semaine">+ Ajouter une ligne</button>
-  </div>
 
-  <div class="card">
-    <h2>Économies</h2>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-economies-semaine">
         <thead><tr><th>Économies</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>Total</th><th></th></tr></thead>
@@ -648,7 +688,7 @@ footer{
       </table>
     </div>
     <button type="button" class="add-row-btn" data-table="tbl-economies-semaine">+ Ajouter une ligne</button>
-  </div>
+  </div><!-- /fin des tableaux cachés -->
 </section>
 
 <!-- ===================== PAGE 5 ===================== -->
@@ -754,10 +794,6 @@ footer{
       <span class="label" style="font-size:1.1em;">Économies totales</span>
       <span class="op">=</span>
       <span class="summary-box" id="syntheseTotal" data-value="0" style="font-size:1.15em;">0,00 €</span>
-    </div>
-    <div class="synthese-line" style="margin-top:14px; opacity:.75;">
-      <span class="label" style="font-size:.85em; font-weight:normal; font-style:italic;">Pour info — total de ton suivi hebdo Économies (page 4), non recompté ici :</span>
-      <span class="summary-box" id="syntheseEconomies" data-value="0" style="font-size:.85em; padding:4px 10px;">0,00 €</span>
     </div>
   </div>
 </section>
@@ -1284,7 +1320,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-02 (19)";
+const BUILD_VERSION = "2026-11-12 (20)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1502,15 +1538,14 @@ function updateDerived(){
   const restant = revenusReel - creditsReel - chargesFixesReel - chargesVarReel - enveloppesBudget;
   setMoneyCell(document.getElementById('restantSalaireBox'), restant);
 
-  const depensesTotales = getTotal('tbl-depenses-semaine','rowtotal');
-  const economiesTotal  = getTotal('tbl-economies-semaine','rowtotal');
+  // depuis le 2026-11-12, les dépenses viennent des semaines de chaque enveloppe (page 4),
+  // et non plus de l'ancien suivi hebdo, désormais caché
+  const depensesTotales = depensesTotalesEnveloppes();
   const gains = num(document.getElementById('gainsInput').value);
 
   setMoneyCell(document.getElementById('syntheseBudgetEnveloppes'), enveloppesBudget);
   setMoneyCell(document.getElementById('syntheseDepenses'), depensesTotales);
-  setMoneyCell(document.getElementById('syntheseEconomies'), economiesTotal);
-  // "Économies" (suivi hebdo) reflète le même argent que Budget − Dépenses, donc on ne
-  // l'additionne plus au total pour éviter de compter deux fois la même somme économisée.
+  // Budget des enveloppes − leurs dépenses = ce qui reste dans les enveloppes, plus les gains
   const economieTotale = enveloppesBudget - depensesTotales + gains;
   setMoneyCell(document.getElementById('syntheseTotal'), economieTotale);
 
@@ -1724,7 +1759,7 @@ function updateMonthIndicator(){
 const DESC_CARRY_TABLES = ['tbl-revenus','tbl-credits','tbl-charges-fixes','tbl-charges-var',
   'tbl-enveloppes','tbl-depenses-semaine','tbl-economies-semaine','tbl-epargne-ct','tbl-epargne-lt','tbl-defis'];
 const DEFAULT_DESCRIPTIONS = { 'tbl-enveloppes': CATEGORIES, 'tbl-depenses-semaine': CATEGORIES };
-const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'] };
+const STICKY_EXTRA_FIELDS = { 'tbl-revenus': ['budget'], 'tbl-charges-fixes': ['budget'], 'tbl-enveloppes': ['budget'], 'tbl-epargne-ct': ['objectif','depot'] };
 
 const DAWN = '0000-00'; // "a toujours existé"
 
@@ -2878,9 +2913,7 @@ const PDF_TABLE_SECTIONS = [
   { title:'Crédits / Dettes', tableId:'tbl-credits' },
   { title:'Charges Fixes', tableId:'tbl-charges-fixes' },
   { title:'Charges Variables Connues', tableId:'tbl-charges-var' },
-  { title:'Enveloppes', tableId:'tbl-enveloppes' },
-  { title:'Dépenses hebdomadaires (enveloppes)', tableId:'tbl-depenses-semaine' },
-  { title:'Économies (hebdo)', tableId:'tbl-economies-semaine' },
+  { title:'Enveloppes', tableId:'tbl-enveloppes' },   // imprimée sous la forme de la page 4 (pdfEnveloppes)
   { title:'Épargnes court terme', tableId:'tbl-epargne-ct' },
   { title:'Épargnes long terme', tableId:'tbl-epargne-lt' },
   { title:'Défis', tableId:'tbl-defis' }
@@ -2932,6 +2965,23 @@ function pdfRowValue(tr, key){
     return els[idx] ? euro(num(els[idx].value)) : '';
   }
   return '';
+}
+
+function pdfEnveloppes(){
+  const lignes = [...document.getElementById('tbl-enveloppes').tBodies[0].rows];
+  const listes = lignes.map(depensesDeLigne);
+  const nb = nbSemainesEnveloppes(listes);
+  const headers = ['Enveloppe', 'Montant par mois'];
+  for (let w = 1; w <= nb; w++) headers.push('Sem. ' + w);
+  headers.push('Total économies');
+  const rows = lignes.map((tr, i) => {
+    const montant = tr.querySelector('.budget-in').value;
+    const cellules = [tr.querySelector('.desc-in').value, euro(num(montant))];
+    for (let w = 0; w < nb; w++) cellules.push((listes[i][w] || '').trim() !== '' ? euro(num(listes[i][w])) : '');
+    cellules.push(euro(calculEnveloppe(montant, listes[i]).economie));
+    return cellules;
+  });
+  return { headers, rows };
 }
 
 function pdfTableRows(tableId, keys){
@@ -2988,11 +3038,19 @@ function generatePdf(){
   y += 26;
 
   PDF_TABLE_SECTIONS.forEach(sec=>{
+    if (sec.tableId === 'tbl-enveloppes'){
+      // une ligne par enveloppe : montant, dépense de chaque semaine, économies (page 4)
+      const t = pdfEnveloppes();
+      addTitle(sec.title, 13);
+      addTable(t.headers, t.rows);
+      addKeyValueTable('Résumé', [['Fin du mois, combien me reste-t-il ?', document.getElementById('envFinDeMois').textContent.trim()]]);
+      return;
+    }
     const { headers, keys } = pdfColumnsForTable(sec.tableId);
     addTitle(sec.title, 13);
     addTable(headers, pdfTableRows(sec.tableId, keys));
 
-    if (sec.tableId === 'tbl-enveloppes'){
+    if (sec.tableId === 'tbl-charges-var'){
       addKeyValueTable('Résumé', [['Reste à épargner (restant du salaire)', document.getElementById('restantSalaireBox').textContent.trim()]]);
     }
     if (sec.tableId === 'tbl-defis'){
@@ -3015,8 +3073,7 @@ function generatePdf(){
     ['Budget enveloppes', document.getElementById('syntheseBudgetEnveloppes').textContent.trim()],
     ['Dépenses totales', document.getElementById('syntheseDepenses').textContent.trim()],
     ['Gains', euro(num(document.getElementById('gainsInput').value))],
-    ['Économies totales', document.getElementById('syntheseTotal').textContent.trim()],
-    ['(Pour info) Suivi hebdo Économies, page 4', document.getElementById('syntheseEconomies').textContent.trim()]
+    ['Économies totales', document.getElementById('syntheseTotal').textContent.trim()]
   ]);
 
   [['livretCT','Livret Court Terme'], ['livretLT','Livret Long Terme'], ['livretDefis','Livret Défis']].forEach(([prefix,label])=>{
@@ -3589,6 +3646,298 @@ function brancherCalendrier(){
   });
 }
 
+/* ---------- Page 4 : les enveloppes, semaine par semaine (2026-11-12) ----------
+   D'après le croquis de Maman : une colonne par enveloppe, le « Montant par mois », puis
+   chaque semaine une dépense et le restant (montant − dépenses cumulées), et à la fin le
+   total des économies.
+
+   La vraie liste des enveloppes reste le tableau caché tbl-enveloppes (une ligne par
+   enveloppe : nom = desc-in, montant = budget-in). Le tableau visible ne fait que l'AFFICHER
+   et y RENVOYER chaque saisie, en déclenchant sur les cases cachées les mêmes événements
+   qu'une frappe. Tout ce qui marche déjà s'applique donc tel quel : report du montant avec la
+   question « ce mois-ci / les suivants », renommage, ordre (flèches), suppression avec sa
+   question, synchronisation. Réécrire tout cela pour des colonnes aurait été bien plus risqué.
+
+   Les dépenses de chaque enveloppe sont rangées sur sa ligne cachée, dans data-depenses
+   (liste JSON : semaine 1, 2…), enregistrée avec le mois par collectRow / restoreRow. */
+const SEMAINES_MIN = 4;   // comme le croquis ; « + Ajouter une semaine » pour une 5e
+const SEMAINES_MAX = 6;
+
+function depensesDeLigne(tr){
+  let liste;
+  try { liste = JSON.parse((tr && tr.dataset && tr.dataset.depenses) || '[]'); } catch(e){ liste = []; }
+  return Array.isArray(liste) ? liste.map(v => v === null || v === undefined ? '' : String(v)) : [];
+}
+
+function ecrireDepensesLigne(tr, liste){
+  if (tr && tr.dataset) tr.dataset.depenses = JSON.stringify(liste.map(v => v === null || v === undefined ? '' : String(v)));
+}
+
+/* Nombre de semaines affichées pour le mois : au moins 4, plus si une enveloppe en a davantage. */
+function nbSemainesEnveloppes(listes){
+  return listes.reduce((n, l) => Math.max(n, l.length), SEMAINES_MIN);
+}
+
+/* Le calcul du croquis, pour une enveloppe : chaque restant = montant − dépenses cumulées.
+   reduce plutôt qu'une boucle : chaque restant dépend du précédent, c'est un cumul. */
+function calculEnveloppe(montant, depenses){
+  const restants = [];
+  depenses.reduce((reste, d) => { const r = reste - num(d); restants.push(r); return r; }, num(montant));
+  const economie = restants.length ? restants[restants.length - 1] : num(montant);
+  return { restants, economie, depense: num(montant) - economie };
+}
+
+/* Total des dépenses de toutes les enveloppes du mois affiché : alimente la Synthèse (page 6)
+   et « Ce mois-ci » (page 8), qui lisaient avant l'ancien suivi hebdo. */
+function depensesTotalesEnveloppes(){
+  const tbody = document.getElementById('tbl-enveloppes').tBodies[0];
+  return [...tbody.rows].reduce((t, tr) => t + depensesDeLigne(tr).reduce((s, d) => s + num(d), 0), 0);
+}
+
+/* Reprise unique des dépenses tapées dans l'ancien « Suivi hebdo » (S1 à S5, page 4 d'avant) :
+   pour une enveloppe qui n'a encore aucune dépense enregistrée, on reprend celles de la ligne du
+   suivi hebdo du MÊME NOM (normDesc), semaine par semaine. Dès que le mois est enregistré, la
+   liste existe : la reprise ne se refait plus jamais. Les anciennes données restent intactes. */
+function reprendreAnciennesDepenses(data){
+  const anciennes = (data && data.tables && data.tables['tbl-depenses-semaine']) || [];
+  const parNom = {};
+  anciennes.forEach(rd => {
+    const key = rd && rd.desc ? normDesc(rd.desc) : '';
+    if (!key || parNom[key]) return;
+    const semaines = (rd.weeks || []).map(v => v === null || v === undefined ? '' : String(v));
+    if (semaines.some(v => v.trim() !== '')) parNom[key] = semaines;
+  });
+  if (!Object.keys(parNom).length) return;
+  const tbody = document.getElementById('tbl-enveloppes').tBodies[0];
+  [...tbody.rows].forEach(tr => {
+    if (!tr.dataset || tr.dataset.depenses !== undefined) return;   // a déjà ses dépenses
+    const descEl = tr.querySelector('.desc-in');
+    const semaines = parNom[descEl ? normDesc(descEl.value) : ''];
+    if (!semaines) return;
+    const liste = semaines.slice();
+    // une 5e semaine vide n'a pas à s'afficher
+    while (liste.length > SEMAINES_MIN && liste[liste.length - 1].trim() === '') liste.pop();
+    ecrireDepensesLigne(tr, liste);
+  });
+}
+
+/* ----- L'écran de la page 4 ----- */
+let lignesEnveloppesAffichees = [];   // colonne i du tableau visible = ligne cachée i
+
+function caseEnv(tag, classe, contenu){
+  const el = document.createElement(tag);
+  if (classe) el.className = classe;
+  if (typeof contenu === 'string') el.textContent = contenu;
+  else if (contenu) el.appendChild(contenu);
+  return el;
+}
+
+function champEnv(classe, valeur, attrs){
+  const el = document.createElement('input');
+  el.className = classe;
+  el.value = valeur || '';
+  Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+function boutonEnv(classe, texte, titre){
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = classe; b.textContent = texte; b.title = titre;
+  return b;
+}
+
+/* Reconstruit le tableau visible à partir des lignes cachées. Appelée quand la liste change
+   (ajout, suppression, ordre, changement de mois : un observateur surveille le tableau caché),
+   jamais pendant la frappe, pour ne pas perdre la case où l'on écrit. */
+function afficherEnveloppes(){
+  const grille = document.getElementById('envGrille');
+  if (!grille) return;
+  const lignes = [...document.getElementById('tbl-enveloppes').tBodies[0].rows];
+  lignesEnveloppesAffichees = lignes;
+  const listes = lignes.map(depensesDeLigne);
+  const nb = nbSemainesEnveloppes(listes);
+  grille.innerHTML = '';
+
+  if (!lignes.length){
+    const tr = document.createElement('tr');
+    const td = caseEnv('td', 'env-vide', 'Aucune enveloppe pour ce mois : touche « + Ajouter une enveloppe ».');
+    tr.appendChild(td);
+    grille.appendChild(tr);
+    majCalculsEnveloppes();
+    return;
+  }
+
+  const thead = document.createElement('thead');
+  const trNoms = document.createElement('tr');
+  trNoms.appendChild(caseEnv('th', 'env-coin', ''));
+  lignes.forEach((tr, i) => {
+    const th = caseEnv('th', 'env-tete');
+    th.appendChild(champEnv('env-nom', tr.querySelector('.desc-in').value, { 'data-i': i, placeholder: 'Nom', 'aria-label': 'Nom de l\'enveloppe' }));
+    const actions = caseEnv('div', 'env-actions');
+    const g = boutonEnv('env-gauche', '←', 'Déplacer vers la gauche');
+    const d = boutonEnv('env-droite', '→', 'Déplacer vers la droite');
+    const x = boutonEnv('env-suppr', '✕', 'Supprimer cette enveloppe');
+    [g, d, x].forEach(b => { b.dataset.i = i; actions.appendChild(b); });
+    th.appendChild(actions);
+    trNoms.appendChild(th);
+  });
+  thead.appendChild(trNoms);
+  grille.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const ligneMontant = document.createElement('tr');
+  ligneMontant.className = 'env-l-montant';
+  ligneMontant.appendChild(caseEnv('th', '', 'Montant par mois'));
+  lignes.forEach((tr, i) => {
+    ligneMontant.appendChild(caseEnv('td', '', champEnv('env-montant', tr.querySelector('.budget-in').value,
+      { type: 'number', step: '0.01', inputmode: 'decimal', 'data-i': i, placeholder: '0' })));
+  });
+  tbody.appendChild(ligneMontant);
+
+  for (let w = 0; w < nb; w++){
+    const ligneDep = document.createElement('tr');
+    ligneDep.className = 'env-l-depense';
+    const titre = caseEnv('th', '');
+    titre.appendChild(caseEnv('span', 'env-semaine', 'Semaine ' + (w + 1)));
+    titre.appendChild(caseEnv('span', 'env-sous-titre', 'Dépense'));
+    ligneDep.appendChild(titre);
+    lignes.forEach((tr, i) => {
+      ligneDep.appendChild(caseEnv('td', '', champEnv('env-dep', listes[i][w] || '',
+        { type: 'number', step: '0.01', inputmode: 'decimal', 'data-i': i, 'data-w': w, placeholder: '–' })));
+    });
+    tbody.appendChild(ligneDep);
+
+    const ligneRest = document.createElement('tr');
+    ligneRest.className = 'env-l-restant';
+    ligneRest.appendChild(caseEnv('th', '', 'Restant'));
+    lignes.forEach((tr, i) => {
+      const td = caseEnv('td', 'env-rest num');
+      td.dataset.i = i; td.dataset.w = w;
+      ligneRest.appendChild(td);
+    });
+    tbody.appendChild(ligneRest);
+  }
+
+  const ligneEco = document.createElement('tr');
+  ligneEco.className = 'env-l-economies';
+  ligneEco.appendChild(caseEnv('th', '', 'Total économies'));
+  lignes.forEach((tr, i) => {
+    const td = caseEnv('td', 'env-eco num');
+    td.dataset.i = i;
+    ligneEco.appendChild(td);
+  });
+  tbody.appendChild(ligneEco);
+  grille.appendChild(tbody);
+  majCalculsEnveloppes();
+}
+
+/* Recalcule restants et économies SANS reconstruire le tableau (pendant la frappe). Les valeurs
+   viennent des lignes cachées, la seule source de vérité. */
+function majCalculsEnveloppes(){
+  const grille = document.getElementById('envGrille');
+  let fin = 0;
+  lignesEnveloppesAffichees.forEach((tr, i) => {
+    const montant = tr.querySelector('.budget-in').value;
+    const depenses = depensesDeLigne(tr);
+    const calc = calculEnveloppe(montant, depenses);
+    if (grille){
+      grille.querySelectorAll('.env-rest[data-i="' + i + '"]').forEach(td => {
+        const w = Number(td.dataset.w);
+        // pas de dépense encore notée cette semaine-là : le restant est celui de la semaine d'avant
+        const r = w < calc.restants.length ? calc.restants[w] : calc.economie;
+        td.textContent = (montant.trim() !== '' || depenses.some(d => d.trim() !== '')) ? euro(r) : '';
+        td.classList.toggle('neg', r < 0);
+      });
+      const eco = grille.querySelector('.env-eco[data-i="' + i + '"]');
+      if (eco){ eco.textContent = euro(calc.economie); eco.classList.toggle('neg', calc.economie < 0); }
+    }
+    fin += calc.economie;
+  });
+  setMoneyCell(document.getElementById('envFinDeMois'), fin);
+}
+
+function brancherEnveloppes(){
+  const grille = document.getElementById('envGrille');
+  const tbodyCache = document.getElementById('tbl-enveloppes').tBodies[0];
+  if (!grille || !tbodyCache) return;
+
+  /* Toute ligne ajoutée, supprimée ou déplacée dans le tableau caché (y compris au changement de
+     mois) reconstruit le tableau visible. L'observateur passe après le code en cours : il voit
+     donc les valeurs déjà remises en place par loadState. */
+  new MutationObserver(() => afficherEnveloppes()).observe(tbodyCache, { childList: true });
+
+  const ligneDe = el => lignesEnveloppesAffichees[Number(el.dataset.i)];
+  // renvoie une saisie vers la case cachée correspondante, comme si on y avait tapé
+  const renvoyer = (el, selecteur, type) => {
+    const tr = ligneDe(el);
+    if (!tr) return;
+    const cache = tr.querySelector(selecteur);
+    cache.value = el.value;
+    cache.dispatchEvent(new Event(type, { bubbles: true }));
+  };
+
+  grille.addEventListener('input', e => {
+    const el = e.target;
+    if (el.classList.contains('env-nom')) renvoyer(el, '.desc-in', 'input');
+    else if (el.classList.contains('env-montant')){ renvoyer(el, '.budget-in', 'input'); majCalculsEnveloppes(); }
+    else if (el.classList.contains('env-dep')){
+      const tr = ligneDe(el);
+      if (!tr) return;
+      const liste = depensesDeLigne(tr);
+      const w = Number(el.dataset.w);
+      while (liste.length <= w) liste.push('');
+      liste[w] = el.value;
+      ecrireDepensesLigne(tr, liste);
+      majCalculsEnveloppes();
+      updateDerived();
+      saveState();
+    }
+  });
+
+  // fin de saisie d'un nom ou d'un montant : mêmes traitements qu'avant (modèle, question de report)
+  grille.addEventListener('change', e => {
+    const el = e.target;
+    if (el.classList.contains('env-nom')) renvoyer(el, '.desc-in', 'change');
+    else if (el.classList.contains('env-montant')) renvoyer(el, '.budget-in', 'change');
+  });
+
+  grille.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur();   // Entrée = fin de saisie
+  });
+
+  grille.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const tr = ligneDe(b);
+    if (!tr) return;
+    if (b.classList.contains('env-gauche')) deplacerLigne('tbl-enveloppes', tr, -1);
+    else if (b.classList.contains('env-droite')) deplacerLigne('tbl-enveloppes', tr, 1);
+    else if (b.classList.contains('env-suppr')) tr.querySelector('.rm-btn').click();   // même question qu'avant
+  });
+
+  document.getElementById('envAjouter').addEventListener('click', () => {
+    document.querySelector('.add-row-btn[data-table="tbl-enveloppes"]').click();
+    // setTimeout : l'observateur reconstruit le tableau juste après ; on place le curseur ensuite
+    setTimeout(() => {
+      const noms = grille.querySelectorAll('.env-nom');
+      if (noms.length) noms[noms.length - 1].focus();
+    }, 0);
+  });
+
+  document.getElementById('envAjouterSemaine').addEventListener('click', () => {
+    const lignes = [...tbodyCache.rows];
+    const nb = nbSemainesEnveloppes(lignes.map(depensesDeLigne));
+    if (nb >= SEMAINES_MAX) return;
+    lignes.forEach(tr => {
+      const liste = depensesDeLigne(tr);
+      while (liste.length < nb + 1) liste.push('');
+      ecrireDepensesLigne(tr, liste);
+    });
+    saveState();
+    afficherEnveloppes();
+  });
+}
+
 /* ---------- save / load ---------- */
 function collectRow(tr){
   const g = sel => { const el = tr.querySelector(sel); return el ? el.value : undefined; };
@@ -3613,7 +3962,9 @@ function collectRow(tr){
     weeks: [...tr.querySelectorAll('.week-in')].map(i=>i.value),
     check: (()=>{ const el = tr.querySelector('.check-in'); return el ? el.checked : undefined; })(),
     // absent quand la liste est vide : JSON.stringify omet les champs undefined
-    ponctuels: champsPonctuels(tr).length ? champsPonctuels(tr) : undefined
+    ponctuels: champsPonctuels(tr).length ? champsPonctuels(tr) : undefined,
+    // dépenses de la semaine 1, 2… d'une enveloppe (page 4) ; absent pour les autres tableaux
+    depenses: (tr.dataset && tr.dataset.depenses !== undefined) ? depensesDeLigne(tr) : undefined
   };
 }
 function restoreRow(tr, rd){
@@ -3628,6 +3979,10 @@ function restoreRow(tr, rd){
   const chk = tr.querySelector('.check-in');
   if (chk && rd.check!==undefined) chk.checked = rd.check;
   if (tr.dataset) tr.dataset.ponctuels = Array.isArray(rd.ponctuels) ? rd.ponctuels.join(',') : '';
+  if (tr.dataset){
+    if (Array.isArray(rd.depenses)) ecrireDepensesLigne(tr, rd.depenses);
+    else delete tr.dataset.depenses;
+  }
 }
 
 /* Un mois « existe » dès lors qu'il est enregistré. Le consulter ne suffit pas. */
@@ -3701,6 +4056,7 @@ function loadState(){
     }
     [...tbody.rows].forEach((tr,i)=> restoreRow(tr, rows[i]));
   });
+  reprendreAnciennesDepenses(data);
 
   Object.entries(data.standalone||{}).forEach(([id,v])=>{
     const el = document.getElementById(id);
@@ -3810,7 +4166,8 @@ document.addEventListener('change', e=>{
   const tableId = table.id;
   const moisDuChoix = currentMonth;
   saveState();
-  const nom = NOM_CHAMP[field] || field;
+  // le budget d'une enveloppe s'appelle « Montant par mois » à l'écran (page 4)
+  const nom = (tableId === 'tbl-enveloppes' && field === 'budget') ? 'Montant par mois' : (NOM_CHAMP[field] || field);
   const texte = value.trim()
     ? 'Tu as mis ' + value.trim() + ' €. Ce montant vaut :'
     : 'Tu as vidé la case. Ce changement vaut :';
@@ -3940,6 +4297,8 @@ populateMonthYearSelects();
 updateMonthIndicator();
 brancherCalendrier();
 afficherCalendrier();
+brancherEnveloppes();
+afficherEnveloppes();
 
 if (bilanMigration && bilanMigration.corriges){
   showDataBanner('✓ Tes données ont été mises à jour automatiquement — '
