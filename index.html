@@ -211,6 +211,7 @@ button.add-row-btn{
 .env-l-economies th, .env-l-economies td{font-weight:bold; border-top:2px solid var(--coral);}
 .env-grille td.neg{color:var(--coral);}
 .env-semaine{display:block; font-weight:bold;}
+button.env-suppr-semaine{background:none; border:none; color:var(--coral); cursor:pointer; font-size:1em; padding:0 4px; margin-left:4px;}
 .env-sous-titre{display:block; font-size:.8em; opacity:.8;}
 .env-vide{font-style:italic; opacity:.7; color:var(--navy); border:none !important;}
 .env-boutons{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
@@ -227,9 +228,18 @@ button.add-row-btn{
 .cal-table th{font-size:.75em; color:var(--navy); opacity:.8; text-align:left; font-weight:normal; padding:2px 3px;}
 .cal-table td{padding:3px; border-bottom:1px solid #e3d9bd; vertical-align:middle;}
 .cal-table input[type=text], .cal-table input[type=number]{width:100%; border:none; background:transparent; font-family:inherit; font-size:1em; color:var(--ink, #1d2b36);}
+/* nom de l'événement : va à la ligne au lieu d'être coupé (zone de texte qui s'agrandit) */
+.cal-table textarea.cal-desc{width:100%; border:none; background:transparent; font-family:inherit; font-size:1em; color:var(--ink, #1d2b36);
+  resize:none; overflow:hidden; field-sizing:content; min-height:1.4em; line-height:1.3; padding:0; white-space:pre-wrap; overflow-wrap:anywhere;}
+.cal-table tr.cal-fait td{opacity:.55;}
+.cal-table tr.cal-fait textarea.cal-desc{text-decoration:line-through;}
+.cal-table tr.cal-fait td.cal-c-paye{opacity:1;}
+.cal-total-mois{display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;}
+.cal-sur{font-size:.6em; font-weight:normal; opacity:.75;}
 .cal-table input:focus{outline:2px solid var(--sea-light); border-radius:3px;}
-.cal-table td.cal-c-jour{width:3.2em;} .cal-table td.cal-c-somme{width:6.5em;}
-.cal-table td.cal-c-rec, .cal-table td.cal-c-suppr{width:2em; text-align:center;}
+/* Jour et Somme resserrés (2026-11-14) : la colonne « Payé » s'ajoute, l'événement garde sa place */
+.cal-table td.cal-c-jour{width:2.6em;} .cal-table td.cal-c-somme{width:5em;}
+.cal-table td.cal-c-rec, .cal-table td.cal-c-paye, .cal-table td.cal-c-suppr{width:2em; text-align:center;}
 .cal-table input.cal-somme{text-align:right;}
 .cal-table tr.cal-recurrent{background:rgba(31,111,139,.07);}
 .cal-table tr.cal-a-valider{background:#fde7c8;}
@@ -882,9 +892,13 @@ footer{
     </div>
     <div class="flex-row">
       <label>Total prévu sur l'année :</label>
-      <span class="summary-box" id="calTotalAnnee" style="font-size:1.15em;">0,00 €</span>
+      <span class="summary-box" id="calTotalAnnee">0,00 €</span>
     </div>
-    <p class="cal-aide">Note ici les dépenses que tu vois venir : un anniversaire, l'assurance, les impôts… Coche 🔁 pour qu'un événement revienne tous les ans.</p>
+    <div class="flex-row">
+      <label>Reste à payer sur l'année :</label>
+      <span class="summary-box" id="calResteAnnee" style="font-size:1.15em;">0,00 €</span>
+    </div>
+    <p class="cal-aide">Note ici les dépenses que tu vois venir : un anniversaire, l'assurance, les impôts… Coche 🔁 pour qu'un événement revienne tous les ans, et ✓ quand il est payé : sa somme sort du reste à payer.</p>
   </div>
   <div class="cal-grille" id="calGrille"></div>
 </section>
@@ -1333,7 +1347,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-14 (24)";
+const BUILD_VERSION = "2026-11-14 (25)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -3253,7 +3267,10 @@ function lireCalendrier(){
   // un calendrier abîmé ou incomplet ne doit jamais empêcher la page de s'afficher
   if (!Array.isArray(cal.ponctuels)) cal.ponctuels = [];
   if (!Array.isArray(cal.recurrents)) cal.recurrents = [];
-  cal.recurrents.forEach(r => { if (!Array.isArray(r.sauf)) r.sauf = []; });
+  cal.recurrents.forEach(r => {
+    if (!Array.isArray(r.sauf)) r.sauf = [];
+    if (!Array.isArray(r.payeAnnees)) r.payeAnnees = [];
+  });
   return cal;
 }
 
@@ -3296,6 +3313,38 @@ function totalDeLAnnee(cal, annee){
   return t;
 }
 
+/* Case « Payé » (2026-11-14, demande de Maman) : un événement payé ne compte plus dans le
+   « reste à payer » du mois et de l'année, mais reste dans le total prévu.
+   - Ponctuel : un simple vrai/faux, `paye`.
+   - Tous les ans : la liste des années payées, `payeAnnees`. Payer les impôts en 2026 ne
+     les marque pas payés en 2027 : chaque année repart « à payer ». */
+function estPaye(x, annee){
+  if (x.type === 'p') return !!x.ev.paye;
+  return (x.ev.payeAnnees || []).indexOf(annee) !== -1;
+}
+
+function marquerPaye(cal, type, id, annee, paye){
+  if (type === 'p'){
+    const p = trouverCalendrier(cal.ponctuels, id);
+    if (p) p.paye = !!paye;
+    return;
+  }
+  const r = trouverCalendrier(cal.recurrents, id);
+  if (!r) return;
+  r.payeAnnees = (r.payeAnnees || []).filter(a => a !== annee);
+  if (paye) r.payeAnnees.push(annee);
+}
+
+function resteDuMois(cal, annee, mois){
+  return evenementsDuMois(cal, annee, mois).reduce((s, x) => s + (estPaye(x, annee) ? 0 : num(x.ev.somme)), 0);
+}
+
+function resteDeLAnnee(cal, annee){
+  let t = 0;
+  for (let m = 1; m <= 12; m++) t += resteDuMois(cal, annee, m);
+  return t;
+}
+
 function trouverCalendrier(liste, id){ return liste.find(x => x.id === id) || null; }
 
 function ajouterPonctuel(cal, annee, mois){
@@ -3319,7 +3368,7 @@ function rendreRecurrent(cal, id){
   if (!p) return null;
   supprimerPonctuel(cal, id);
   const r = { id: nouvelIdCalendrier(), mois: p.mois, jour: p.jour, desc: p.desc, somme: p.somme,
-              depuis: p.annee, jusqua: null, sauf: [] };
+              depuis: p.annee, jusqua: null, sauf: [], payeAnnees: p.paye ? [p.annee] : [] };
   cal.recurrents.push(r);
   return r.id;
 }
@@ -3334,7 +3383,8 @@ function couperSerie(cal, r, annee){
 function arreterRecurrence(cal, id, annee){
   const r = trouverCalendrier(cal.recurrents, id);
   if (!r) return null;
-  const p = { id: nouvelIdCalendrier(), annee, mois: r.mois, jour: r.jour, desc: r.desc, somme: r.somme };
+  const p = { id: nouvelIdCalendrier(), annee, mois: r.mois, jour: r.jour, desc: r.desc, somme: r.somme,
+              paye: (r.payeAnnees || []).indexOf(annee) !== -1 };
   couperSerie(cal, r, annee);
   cal.ponctuels.push(p);
   return p.id;
@@ -3348,16 +3398,20 @@ function modifierRecurrent(cal, id, annee, champs, portee){
     // l'année devient une exception, avec sa propre ligne ponctuelle modifiée
     r.sauf.push(annee);
     cal.ponctuels.push(Object.assign({ id: nouvelIdCalendrier(), annee, mois: r.mois,
-                                       jour: r.jour, desc: r.desc, somme: r.somme }, champs));
+                                       jour: r.jour, desc: r.desc, somme: r.somme,
+                                       paye: (r.payeAnnees || []).indexOf(annee) !== -1 }, champs));
     return;
   }
   if (r.depuis === annee){ Object.assign(r, champs); return; }   // la série commence ici : rien à garder avant
   // sinon la série se coupe ici, et une nouvelle repart de cette année avec les nouvelles valeurs
+  const payees = r.payeAnnees || [];
   const suite = Object.assign({}, r, champs, {
-    id: nouvelIdCalendrier(), depuis: annee, sauf: r.sauf.filter(a => a > annee)
+    id: nouvelIdCalendrier(), depuis: annee, sauf: r.sauf.filter(a => a > annee),
+    payeAnnees: payees.filter(a => a >= annee)
   });
   r.jusqua = annee;
   r.sauf = r.sauf.filter(a => a < annee);
+  r.payeAnnees = payees.filter(a => a < annee);
   cal.recurrents.push(suite);
 }
 
@@ -3385,6 +3439,18 @@ function champCal(type, classe, valeur, attrs){
   el.className = classe;
   if (type === 'checkbox') el.checked = !!valeur; else el.value = valeur === undefined || valeur === null ? '' : valeur;
   Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+/* Le nom d'un événement va à la ligne au lieu d'être coupé (« Annivers… » sur la tablette de
+   Maman) : une zone de texte d'une ligne qui s'agrandit (CSS field-sizing), au lieu d'un champ
+   simple qui ne sait pas aller à la ligne. Entrée ne crée pas de retour à la ligne (voir keydown). */
+function champTexteCal(classe, valeur, placeholder){
+  const el = document.createElement('textarea');
+  el.className = classe;
+  el.rows = 1;
+  el.value = valeur === undefined || valeur === null ? '' : valeur;
+  el.placeholder = placeholder;
   return el;
 }
 
@@ -3423,7 +3489,7 @@ function afficherCalendrier(options){
       table.className = 'cal-table';
       const thead = document.createElement('thead');
       const trh = document.createElement('tr');
-      [['Jour',''], ['Événement',''], ['Somme',''], ['🔁','Tous les ans'], ['',''], ['','']].forEach(([t, titreCol]) => {
+      [['Jour',''], ['Événement',''], ['Somme',''], ['🔁','Tous les ans'], ['✓','Payé'], ['',''], ['','']].forEach(([t, titreCol]) => {
         const th = document.createElement('th');
         th.textContent = t;
         if (titreCol) th.title = titreCol;
@@ -3437,10 +3503,13 @@ function afficherCalendrier(options){
         tr.dataset.id = ev.id;
         tr.dataset.type = type;
         if (type === 'r') tr.className = 'cal-recurrent';
+        const paye = estPaye({ type, ev }, anneeCalendrier);
+        if (paye) tr.classList.add('cal-fait');
         tr.appendChild(celluleCal('cal-c-jour', champCal('number', 'cal-jour', ev.jour, { min: '1', max: '31', inputmode: 'numeric', placeholder: '–' })));
-        tr.appendChild(celluleCal('cal-c-desc', champCal('text', 'cal-desc', ev.desc, { placeholder: 'Événement' })));
+        tr.appendChild(celluleCal('cal-c-desc', champTexteCal('cal-desc', ev.desc, 'Événement')));
         tr.appendChild(celluleCal('cal-c-somme', champCal('number', 'cal-somme', ev.somme, { step: '0.01', inputmode: 'decimal', placeholder: '0' })));
         tr.appendChild(celluleCal('cal-c-rec', champCal('checkbox', 'cal-rec', type === 'r', { title: 'Revient tous les ans' })));
+        tr.appendChild(celluleCal('cal-c-paye', champCal('checkbox', 'cal-paye', paye, { title: 'Payé : ne compte plus dans le reste à payer' })));
         // les valeurs enregistrées, pour savoir si la ligne a été modifiée sans être validée
         tr.dataset.jour = ev.jour || ''; tr.dataset.desc = ev.desc || ''; tr.dataset.somme = ev.somme || '';
         const valider = document.createElement('button');
@@ -3483,11 +3552,28 @@ function afficherCalendrier(options){
 function majTotauxCalendrier(){
   const cal = lireCalendrier();
   document.querySelectorAll('#calGrille .cal-mois').forEach(carte => {
-    const t = totalDuMois(cal, anneeCalendrier, Number(carte.dataset.mois));
-    carte.querySelector('.cal-total-mois').textContent = t ? euro(t) : '';
+    const m = Number(carte.dataset.mois);
+    const prevu = totalDuMois(cal, anneeCalendrier, m);
+    const reste = resteDuMois(cal, anneeCalendrier, m);
+    const zone = carte.querySelector('.cal-total-mois');
+    zone.textContent = '';
+    if (!prevu) return;
+    // en grand ce qui reste à payer ; en petit le prévu, seulement s'il y a déjà des paiements
+    const grand = document.createElement('span');
+    grand.className = 'cal-reste';
+    grand.textContent = euro(reste);
+    zone.appendChild(grand);
+    if (reste !== prevu){
+      const petit = document.createElement('span');
+      petit.className = 'cal-sur';
+      petit.textContent = 'sur ' + euro(prevu) + ' prévus';
+      zone.appendChild(petit);
+    }
   });
   const tot = document.getElementById('calTotalAnnee');
   if (tot) tot.textContent = euro(totalDeLAnnee(cal, anneeCalendrier));
+  const resteAn = document.getElementById('calResteAnnee');
+  if (resteAn) resteAn.textContent = euro(resteDeLAnnee(cal, anneeCalendrier));
 }
 
 /* Une ligne est « à valider » dès qu'une case diffère de ce qui est enregistré. */
@@ -3595,10 +3681,24 @@ function brancherCalendrier(){
   // Entrée dans une case d'une ligne orange : comme « ✓ Valider »
   grille.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
+    // le nom est une zone de texte : Entrée n'y crée jamais de retour à la ligne
+    if (e.target.classList.contains('cal-desc')) e.preventDefault();
     const tr = e.target.closest('tr.cal-a-valider');
     if (!tr) return;
     e.preventDefault();
     validerLigneCal(tr);
+  });
+
+  /* Case « Payé » : agit tout de suite, sans question (cocher ou décocher ne change que le reste
+     à payer, jamais les autres années ni les sommes). Les lignes orange sont gardées. */
+  grille.addEventListener('change', e => {
+    if (!e.target.classList.contains('cal-paye')) return;
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const cal = lireCalendrier();
+    marquerPaye(cal, tr.dataset.type, tr.dataset.id, anneeCalendrier, e.target.checked);
+    ecrireCalendrier(cal);
+    afficherCalendrier();
   });
 
   // Case 🔁 : agit tout de suite (et enregistre au passage une ligne ponctuelle modifiée)
@@ -3705,6 +3805,20 @@ function ecrireDepensesLigne(tr, liste){
 /* Nombre de semaines affichées pour le mois : au moins 4, plus si une enveloppe en a davantage. */
 function nbSemainesEnveloppes(listes){
   return listes.reduce((n, l) => Math.max(n, l.length), SEMAINES_MIN);
+}
+
+/* Retirer une semaine (2026-11-14, demande de Maman : une 5e semaine ajoutée pour essayer ne
+   s'enlevait pas). Seule la DERNIÈRE semaine, et seulement au-delà des 4 de base, peut partir :
+   les 4 semaines du croquis restent toujours. Fonctions sans écran, testées seules. */
+function depensesDeLaSemaine(listes, w){
+  return listes.reduce((s, l) => s + num(l[w] || ''), 0);
+}
+function semaineADesDepenses(listes, w){
+  return listes.some(l => String(l[w] || '').trim() !== '');
+}
+/* Chaque liste est coupée à w éléments : la semaine w (et toute suivante) disparaît. */
+function retirerSemaine(listes, w){
+  return listes.map(l => l.slice(0, w));
 }
 
 /* Le calcul du croquis, pour une enveloppe : chaque restant = montant − dépenses cumulées.
@@ -3854,7 +3968,14 @@ function afficherEnveloppes(){
     const ligneDep = document.createElement('tr');
     ligneDep.className = 'env-l-depense';
     const titre = caseEnv('th', '');
-    titre.appendChild(caseEnv('span', 'env-semaine', 'Semaine ' + (w + 1)));
+    const nomSemaine = caseEnv('span', 'env-semaine', 'Semaine ' + (w + 1));
+    // la croix n'existe que sur la dernière semaine, au-delà des 4 de base
+    if (w >= SEMAINES_MIN && w === nb - 1){
+      const x = boutonEnv('env-suppr-semaine', '✕', 'Retirer la semaine ' + (w + 1));
+      x.dataset.w = w;
+      nomSemaine.appendChild(x);
+    }
+    titre.appendChild(nomSemaine);
     titre.appendChild(caseEnv('span', 'env-sous-titre', 'Dépense'));
     ligneDep.appendChild(titre);
     lignes.forEach((tr, i) => {
@@ -3926,6 +4047,24 @@ function majCalculsEnveloppes(){
   setMoneyCell(document.getElementById('envFinDeMois'), fin);   // = bilan.reste (vérifié par le test)
 }
 
+/* ✕ sur la dernière semaine : si elle porte déjà des dépenses, on demande avant de les effacer. */
+function retirerSemaineEcran(w){
+  const lignes = [...document.getElementById('tbl-enveloppes').tBodies[0].rows];
+  const listes = lignes.map(depensesDeLigne);
+  const retirer = () => {
+    retirerSemaine(listes, w).forEach((l, i) => ecrireDepensesLigne(lignes[i], l));
+    updateDerived();
+    saveState();
+    afficherEnveloppes();
+  };
+  if (!semaineADesDepenses(listes, w)){ retirer(); return; }
+  demanderChoix('Retirer la semaine ' + (w + 1),
+    'Cette semaine contient des dépenses (' + euro(depensesDeLaSemaine(listes, w)) + '). Elles seront effacées.', '', [
+      { cle: 'oui', texte: 'Retirer la semaine', principal: true },
+      { cle: 'annuler', texte: 'Annuler', discret: true }
+    ]).then(choix => { if (choix === 'oui') retirer(); });
+}
+
 function brancherEnveloppes(){
   const grille = document.getElementById('envGrille');
   const tbodyCache = document.getElementById('tbl-enveloppes').tBodies[0];
@@ -3978,6 +4117,7 @@ function brancherEnveloppes(){
   grille.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.classList.contains('env-suppr-semaine')){ retirerSemaineEcran(Number(b.dataset.w)); return; }
     const tr = ligneDe(b);
     if (!tr) return;
     if (b.classList.contains('env-gauche')) deplacerLigne('tbl-enveloppes', tr, -1);
