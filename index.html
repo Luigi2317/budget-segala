@@ -513,10 +513,10 @@ footer{
   <button data-tab="p3">3. Charges Variables</button>
   <button data-tab="p4">4. Enveloppes</button>
   <button data-tab="p5">5. Épargnes &amp; Défis</button>
-  <button data-tab="p6">6. Répartition &amp; Synthèse</button>
+  <button data-tab="p6">6. Synthèse</button>
   <button data-tab="p7">7. Suivi des Livrets</button>
-  <button data-tab="p8">8. Ce mois-ci</button>
-  <button data-tab="p9">9. Calendrier de l'année</button>
+  <!-- l'identifiant p9 est gardé : le code du calendrier s'y réfère ; seul le numéro affiché change -->
+  <button data-tab="p9">8. Calendrier de l'année</button>
 </nav>
 
 <main>
@@ -615,7 +615,17 @@ footer{
       <button type="button" class="cal-ajouter" id="envAjouter">+ Ajouter une enveloppe</button>
       <button type="button" class="cal-ajouter" id="envAjouterSemaine">+ Ajouter une semaine</button>
     </div>
+    <!-- Le bilan du mois des enveloppes (demande de Maman, 2026-11-14) : il reprend ce que montrait
+         la page 8 « Ce mois-ci », pour tout avoir au même endroit. -->
     <div class="flex-row" style="margin-top:18px;">
+      <label>Total des enveloppes (prévu) :</label>
+      <span class="summary-box" id="envTotalPrevu" data-value="0">0,00 €</span>
+    </div>
+    <div class="flex-row">
+      <label>Fin du mois, combien j'ai dépensé ?</label>
+      <span class="summary-box" id="envDepenseMois" data-value="0">0,00 €</span>
+    </div>
+    <div class="flex-row">
       <label>Fin du mois, combien me reste-t-il ?</label>
       <span class="summary-box" id="envFinDeMois" data-value="0" style="font-size:1.15em;">0,00 €</span>
     </div>
@@ -769,8 +779,10 @@ footer{
 
 <!-- ===================== PAGE 6 ===================== -->
 <section class="page" id="p6">
-  <div class="card">
-    <h2><span class="num-badge">6</span> Répartition des économies</h2>
+  <!-- « Répartition des économies » : Maman ne s'en sert pas (2026-11-14). Cachée et non
+       supprimée : ses cases restent lues et enregistrées avec chaque mois, rien n'est effacé. -->
+  <div class="card" hidden>
+    <h2>Répartition des économies</h2>
     <div class="table-scroll">
       <table class="budget-table" id="tbl-repartition">
         <thead><tr><th>Description</th><th>Épargnes</th><th>Défis</th><th>Total</th></tr></thead>
@@ -788,7 +800,7 @@ footer{
   </div>
 
   <div class="card">
-    <h2>Synthèse</h2>
+    <h2><span class="num-badge">6</span> Synthèse des enveloppes</h2>
     <div class="synthese-line">
       <span class="label">Budget enveloppes</span>
       <span class="summary-box" id="syntheseBudgetEnveloppes" data-value="0">0,00 €</span>
@@ -853,28 +865,16 @@ footer{
   </div>
 </section>
 
-<!-- ===================== PAGE 8 ===================== -->
-<section class="page" id="p8">
-  <div class="card">
-    <h2><span class="num-badge">8</span> Ce mois-ci</h2>
-    <div class="flex-row">
-      <label>Dépenses du mois :</label>
-      <span class="summary-box" id="objectifDepensesBox" data-value="0" style="font-size:1.15em;">0,00 €</span>
-    </div>
-    <div class="flex-row">
-      <label>Mensualité épargnée ce mois :</label>
-      <span class="summary-box" id="objectifMensualiteBox" data-value="0" style="font-size:1.15em;">0,00 €</span>
-    </div>
-    <p style="font-size:.8em; color:var(--navy); opacity:.8; font-style:italic; margin-top:14px;">Ces deux chiffres sont repris automatiquement des pages "Suivi Hebdo" et "Synthèse" — rien à ressaisir ici.</p>
-  </div>
-</section>
+<!-- L'ancienne page 8 « Ce mois-ci » a été supprimée le 2026-11-14 : ses deux chiffres
+     (dépenses du mois, ce qui reste) sont désormais sous le tableau de la page 4. Elle ne
+     contenait que des calculs, aucune donnée saisie. -->
 
-<!-- Page 9 : calendrier des dépenses prévues sur l'année. Volontairement à part du budget
+<!-- Page 8 (section p9 dans le code) : calendrier des dépenses prévues sur l'année. Volontairement à part du budget
      mensuel : aucune classe budget-table ni add-row-btn ici, pour ne déclencher aucun des
      traitements des tableaux de budget. -->
 <section class="page" id="p9">
   <div class="card">
-    <h2><span class="num-badge">9</span> Calendrier de l'année</h2>
+    <h2><span class="num-badge">8</span> Calendrier de l'année</h2>
     <div class="cal-annee">
       <button type="button" class="cal-nav" id="calAnneePrec" title="Année précédente">‹</button>
       <span id="calAnnee"></span>
@@ -1333,7 +1333,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-12 (22)";
+const BUILD_VERSION = "2026-11-14 (24)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1564,9 +1564,8 @@ function updateDerived(){
   // Budget des enveloppes − leurs dépenses = ce qui reste dans les enveloppes, plus les gains
   const economieTotale = enveloppesBudget - depensesTotales + gains;
   setMoneyCell(document.getElementById('syntheseTotal'), economieTotale);
-
-  setMoneyCell(document.getElementById('objectifDepensesBox'), depensesTotales);
-  setMoneyCell(document.getElementById('objectifMensualiteBox'), economieTotale);
+  // (l'ancienne page 8 « Ce mois-ci » affichait aussi ces deux chiffres : supprimée le 2026-11-14,
+  //  ils sont sous le tableau de la page 4)
 }
 
 /* ---------- livrets ---------- */
@@ -3086,6 +3085,8 @@ function generatePdf(){
       addTitle(sec.title, 13);
       addTable(t.headers, t.rows);
       addKeyValueTable('Résumé', [
+        ['Total des enveloppes (prévu)', document.getElementById('envTotalPrevu').textContent.trim()],
+        ['Fin du mois, combien j\'ai dépensé ?', document.getElementById('envDepenseMois').textContent.trim()],
         ['Fin du mois, combien me reste-t-il ?', document.getElementById('envFinDeMois').textContent.trim()],
         ['Reste à épargner (restant du salaire)', document.getElementById('restantSalaireBox').textContent.trim()]
       ]);
@@ -3100,17 +3101,8 @@ function generatePdf(){
     }
   });
 
-  {
-    const tbody = document.getElementById('tbl-repartition').tBodies[0];
-    const rows = [...tbody.rows].map(tr => [
-      tr.children[0].textContent.trim(),
-      pdfRowValue(tr,'epargnes'), pdfRowValue(tr,'defis'), pdfRowValue(tr,'rowtotal')
-    ]);
-    addTitle('Répartition des économies', 13);
-    addTable(['Semaine','Épargnes','Défis','Total'], rows);
-  }
-
-  addKeyValueTable('Synthèse', [
+  // « Répartition des économies » n'est plus imprimée : cachée depuis le 2026-11-14 (page 6)
+  addKeyValueTable('Synthèse des enveloppes', [
     ['Budget enveloppes', document.getElementById('syntheseBudgetEnveloppes').textContent.trim()],
     ['Dépenses totales', document.getElementById('syntheseDepenses').textContent.trim()],
     ['Gains', euro(num(document.getElementById('gainsInput').value))],
@@ -3128,11 +3120,7 @@ function generatePdf(){
   addKeyValueTable('Total des 3 livrets', [
     ['Total', document.getElementById('livretsTotalBox').textContent.trim()]
   ]);
-
-  addKeyValueTable('Ce mois-ci', [
-    ['Dépenses du mois', document.getElementById('objectifDepensesBox').textContent.trim()],
-    ['Mensualité épargnée ce mois', document.getElementById('objectifMensualiteBox').textContent.trim()]
-  ]);
+  // l'ancienne page 8 « Ce mois-ci » n'existe plus : ses chiffres sont dans le résumé des enveloppes
 
   doc.save(`budget-segala-${currentMonth}.pdf`);
 }
@@ -3899,6 +3887,16 @@ function afficherEnveloppes(){
   majCalculsEnveloppes();
 }
 
+/* Le bilan du mois des enveloppes (2026-11-14, remplace la page 8 « Ce mois-ci ») : total prévu
+   (somme des montants par mois), total dépensé, et ce qui reste. Fonction séparée, sans écran,
+   pour pouvoir la tester. Toujours vrai : reste = prévu − dépensé. Les « Gains » de la Synthèse
+   (page 6) n'y entrent pas : ce bilan ne parle que des enveloppes (choix de Luigi). */
+function bilanEnveloppes(montants, listesDepenses){
+  const prevu = montants.reduce((s, m) => s + num(m), 0);
+  const depense = listesDepenses.reduce((s, l) => s + l.reduce((t, d) => t + num(d), 0), 0);
+  return { prevu, depense, reste: prevu - depense };
+}
+
 /* Recalcule restants et économies SANS reconstruire le tableau (pendant la frappe). Les valeurs
    viennent des lignes cachées, la seule source de vérité. */
 function majCalculsEnveloppes(){
@@ -3921,7 +3919,11 @@ function majCalculsEnveloppes(){
     }
     fin += calc.economie;
   });
-  setMoneyCell(document.getElementById('envFinDeMois'), fin);
+  const bilan = bilanEnveloppes(lignesEnveloppesAffichees.map(tr => tr.querySelector('.budget-in').value),
+                                lignesEnveloppesAffichees.map(depensesDeLigne));
+  setMoneyCell(document.getElementById('envTotalPrevu'), bilan.prevu);
+  setMoneyCell(document.getElementById('envDepenseMois'), bilan.depense);
+  setMoneyCell(document.getElementById('envFinDeMois'), fin);   // = bilan.reste (vérifié par le test)
 }
 
 function brancherEnveloppes(){
