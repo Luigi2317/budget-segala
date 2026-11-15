@@ -252,6 +252,22 @@ button.cal-ajouter{margin-top:6px; background:var(--sea); color:#fff; border:non
 button.cal-suppr{background:none; border:none; color:var(--coral); cursor:pointer; font-size:1.1em;}
 button.add-row-btn:hover{background:var(--navy);}
 
+/* ---------- Page 6 : bilan annuel (feuille de Maman : 3 mois par rangée) ---------- */
+.bilan-grille{grid-template-columns:repeat(3, 1fr); margin-bottom:14px;}
+@media (max-width:720px){ .bilan-grille{grid-template-columns:repeat(2, 1fr);} }
+@media (max-width:440px){ .bilan-grille{grid-template-columns:1fr;} }
+.bilan-mois h3{color:var(--navy); margin:0 0 6px; padding-bottom:4px; border-bottom:2px solid var(--coral);}
+.bilan-table{width:100%; border-collapse:collapse;}
+.bilan-table th{text-align:left; font-weight:normal; color:var(--navy); padding:4px 3px; border-bottom:1px solid #e3d9bd;}
+.bilan-table td{text-align:right; padding:4px 3px; border-bottom:1px solid #e3d9bd; white-space:nowrap;}
+.bilan-table tr.bilan-total th, .bilan-table tr.bilan-total td{font-weight:bold;}
+.bilan-table input.bilan-gains{width:6em; text-align:right; border:1px solid var(--sea); border-radius:5px; padding:3px 6px; font-family:inherit; font-size:1em;}
+.bilan-mois.bilan-vide{opacity:.6;}
+.bilan-defis{display:flex; flex-wrap:wrap; gap:8px 22px; justify-content:center; color:var(--navy); font-weight:bold;}
+.bilan-defis label{cursor:pointer;}
+.bilan-totaux{display:flex; flex-wrap:wrap; gap:14px 22px; justify-content:center;}
+.bilan-cadre{display:flex; flex-direction:column; align-items:center; gap:6px; font-weight:bold; color:var(--navy);}
+
 .summary-box{
   display:inline-block; min-width:140px; padding:8px 14px; border:2px solid var(--coral);
   border-radius:6px; background:#fbeee2; font-weight:bold; color:var(--navy); text-align:center;
@@ -523,10 +539,10 @@ footer{
   <button data-tab="p3">3. Charges Variables</button>
   <button data-tab="p4">4. Enveloppes</button>
   <button data-tab="p5">5. Épargnes &amp; Défis</button>
-  <button data-tab="p6">6. Synthèse</button>
+  <button data-tab="p6">6. Bilan annuel</button>
   <button data-tab="p7">7. Suivi des Livrets</button>
   <!-- l'identifiant p9 est gardé : le code du calendrier s'y réfère ; seul le numéro affiché change -->
-  <button data-tab="p9">8. Calendrier de l'année</button>
+  <button data-tab="p9">8. Calendrier des dépenses de l'année</button>
 </nav>
 
 <main>
@@ -809,7 +825,32 @@ footer{
     </div>
   </div>
 
+  <!-- Bilan annuel (feuille de Maman, 2026-11-15) : remplace la Synthèse à l'écran. Tout est
+       calculé à partir des pages 4 et 5 de chaque mois ; seuls les Gains se notent ici. -->
   <div class="card">
+    <h2><span class="num-badge">6</span> Bilan annuel</h2>
+    <div class="cal-annee">
+      <button type="button" class="cal-nav" id="bilanAnneePrec" title="Année précédente">‹</button>
+      <span id="bilanAnnee"></span>
+      <button type="button" class="cal-nav" id="bilanAnneeSuiv" title="Année suivante">›</button>
+    </div>
+    <div class="bilan-defis">
+      <label><input type="checkbox" id="bilanDefisTous"> Compter les défis</label>
+      <label><input type="checkbox" id="bilanDefisReussis"> Compter les défis réussis</label>
+    </div>
+    <p class="cal-aide">Tout se remplit seul avec les pages 4 et 5 de chaque mois. Seuls les gains se notent ici, si tu en as.</p>
+  </div>
+  <div class="cal-grille bilan-grille" id="bilanGrille"></div>
+  <div class="card bilan-totaux">
+    <div class="bilan-cadre"><span>J'ai épargné</span><span class="summary-box" id="bilanTotEpargne">0,00 €</span></div>
+    <div class="bilan-cadre"><span>J'ai économisé</span><span class="summary-box" id="bilanTotEconomie">0,00 €</span></div>
+    <div class="bilan-cadre"><span>J'ai dépensé</span><span class="summary-box" id="bilanTotDepenses">0,00 €</span></div>
+    <div class="bilan-cadre"><span>J'ai gagné</span><span class="summary-box" id="bilanTotGains">0,00 €</span></div>
+  </div>
+
+  <!-- Ancienne « Synthèse des enveloppes » : cachée et non supprimée (2026-11-15). Sa case Gains
+       (gainsInput) reste ici : elle garde les gains du mois affiché, que le bilan lit et modifie. -->
+  <div class="card" hidden>
     <h2><span class="num-badge">6</span> Synthèse des enveloppes</h2>
     <div class="synthese-line">
       <span class="label">Budget enveloppes</span>
@@ -884,7 +925,7 @@ footer{
      traitements des tableaux de budget. -->
 <section class="page" id="p9">
   <div class="card">
-    <h2><span class="num-badge">8</span> Calendrier de l'année</h2>
+    <h2><span class="num-badge">8</span> Calendrier des dépenses de l'année</h2>
     <div class="cal-annee">
       <button type="button" class="cal-nav" id="calAnneePrec" title="Année précédente">‹</button>
       <span id="calAnnee"></span>
@@ -1347,7 +1388,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-14 (25)";
+const BUILD_VERSION = "2026-11-15 (27)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -4276,6 +4317,184 @@ function loadState(){
   });
 }
 
+/* ---------- Page 6 : bilan annuel (feuille de Maman, 2026-11-15) ----------
+   Le bilan ne fait que LIRE les mois enregistrés (une ligne budget_months par mois, recopiée dans
+   le navigateur à la connexion). Seule exception : les Gains, que Maman note ici ; ils sont rangés
+   là où ils l'ont toujours été, dans la case gainsInput du mois concerné. */
+const BILAN_DEFIS_KEY = "budgetSegala_bilanDefis_v1";   // '' | 'tous' | 'reussis' : choix gardé sur l'appareil
+let anneeBilan = new Date().getFullYear();
+
+/* Dépenses de chaque enveloppe d'un mois enregistré. Un mois d'avant le 2026-11-12 jamais rouvert
+   n'a pas encore ses listes : on les prend dans l'ancien suivi hebdo, par nom, comme le fait la
+   page 4 à l'ouverture (reprendreAnciennesDepenses). Le bilan donne ainsi les mêmes chiffres. */
+function depensesEnveloppesDonnees(data){
+  const tables = (data && data.tables) || {};
+  const parNom = {};
+  (tables['tbl-depenses-semaine'] || []).forEach(rd => {
+    const key = rd && rd.desc ? normDesc(rd.desc) : '';
+    if (!key || parNom[key]) return;
+    const semaines = (rd.weeks || []).map(v => v === null || v === undefined ? '' : String(v));
+    if (semaines.some(v => v.trim() !== '')) parNom[key] = semaines;
+  });
+  return (tables['tbl-enveloppes'] || []).map(rd => {
+    if (rd && Array.isArray(rd.depenses)) return rd.depenses;
+    return parNom[rd && rd.desc ? normDesc(rd.desc) : ''] || [];
+  });
+}
+
+/* Les quatre lignes d'un mois (plus les gains), ou null pour un mois jamais ouvert.
+   - Épargne  = dépôts − retraits des épargnes court et long terme (page 5), plus les défis si
+                l'une des deux cases est cochée ;
+   - Économie = « Fin du mois, combien me reste-t-il ? » (page 4) ;
+   - Total    = Épargne + Économie (les gains n'y entrent pas : choix de Luigi) ;
+   - Dépenses = « Fin du mois, combien j'ai dépensé ? » (page 4). */
+function chiffresDuMois(data, defis){
+  if (!data || !data.tables) return null;
+  const tables = data.tables;
+  let epargne = 0;
+  ENVELOPE_TABLES.forEach(id => (tables[id] || []).forEach(rd => {
+    if (rd) epargne += num(depotEnregistre(rd) || '') - num(rd.retrait || '');
+  }));
+  if (defis === 'tous' || defis === 'reussis'){
+    (tables['tbl-defis'] || []).forEach(rd => {
+      if (rd && (defis === 'tous' || rd.check === true)) epargne += num(rd.montant || '');
+    });
+  }
+  const montants = (tables['tbl-enveloppes'] || []).map(rd => (rd && rd.budget) || '');
+  const b = bilanEnveloppes(montants, depensesEnveloppesDonnees(data));
+  // arrondi au centime : additionner des nombres à virgule laisse des restes du type 0,30000000000000004
+  const c = x => Math.round(x * 100) / 100;
+  const gains = num(((data.standalone || {}).gainsInput) || '');
+  return { epargne: c(epargne), economie: c(b.reste), total: c(epargne + b.reste), depenses: c(b.depense), gains: c(gains) };
+}
+
+function cleDuMois(annee, mois){ return annee + '-' + String(mois).padStart(2, '0'); }
+
+/* Les 12 mois d'une année et les totaux du bas. lireMois(cle) rend les données d'un mois (ou null) :
+   passée en paramètre, elle permet de tester le calcul sans navigateur. */
+function bilanDeLAnnee(lireMois, annee, defis){
+  const mois = [];
+  const totaux = { epargne: 0, economie: 0, depenses: 0, gains: 0 };
+  for (let m = 1; m <= 12; m++){
+    const ch = chiffresDuMois(lireMois(cleDuMois(annee, m)), defis);
+    mois.push(ch);
+    if (ch) Object.keys(totaux).forEach(k => { totaux[k] += ch[k]; });
+  }
+  Object.keys(totaux).forEach(k => { totaux[k] = Math.round(totaux[k] * 100) / 100; });
+  return { mois, totaux };
+}
+
+function lireMoisEnregistre(cle){
+  try { return JSON.parse(localStorage.getItem(DATA_PREFIX + cle) || 'null'); } catch(e){ return null; }
+}
+function lireOptionDefis(){
+  try { const v = localStorage.getItem(BILAN_DEFIS_KEY); return v === 'tous' || v === 'reussis' ? v : ''; } catch(e){ return ''; }
+}
+
+/* Écrit les gains d'un mois. Le mois affiché passe par sa case gainsInput (sinon le prochain
+   enregistrement de la page écraserait la valeur) ; un autre mois est modifié dans ses données
+   enregistrées, puis marqué pour l'envoi au compte. Un mois jamais ouvert n'est jamais créé ici :
+   il perdrait les montants reportés automatiquement à sa première ouverture. */
+function ecrireGainsDuMois(cle, valeur){
+  if (cle === currentMonth){
+    if (!moisEstActif()) return;
+    document.getElementById('gainsInput').value = valeur;
+    updateDerived();
+    saveState();
+    return;
+  }
+  const data = lireMoisEnregistre(cle);
+  if (!data) return;
+  data.standalone = data.standalone || {};
+  data.standalone.gainsInput = valeur;
+  try { localStorage.setItem(DATA_PREFIX + cle, JSON.stringify(data)); } catch(e){ return; }
+  if (window.__markMonthDirty) window.__markMonthDirty(cle);
+  if (window.__syncToCloud) window.__syncToCloud();
+}
+
+function majTotauxBilan(){
+  const b = bilanDeLAnnee(lireMoisEnregistre, anneeBilan, lireOptionDefis());
+  setMoneyCell(document.getElementById('bilanTotEpargne'), b.totaux.epargne);
+  setMoneyCell(document.getElementById('bilanTotEconomie'), b.totaux.economie);
+  setMoneyCell(document.getElementById('bilanTotDepenses'), b.totaux.depenses);
+  setMoneyCell(document.getElementById('bilanTotGains'), b.totaux.gains);
+  return b;
+}
+
+/* Une ligne du petit tableau d'un mois ; textContent : rien n'est interprété comme du HTML. */
+function ligneBilan(titre, contenu, classe){
+  const tr = document.createElement('tr');
+  if (classe) tr.className = classe;
+  const th = document.createElement('th');
+  th.textContent = titre;
+  const td = document.createElement('td');
+  if (typeof contenu === 'string') td.textContent = contenu; else td.appendChild(contenu);
+  tr.appendChild(th); tr.appendChild(td);
+  return tr;
+}
+
+function afficherBilan(){
+  const grille = document.getElementById('bilanGrille');
+  if (!grille) return;
+  document.getElementById('bilanAnnee').textContent = anneeBilan;
+  const option = lireOptionDefis();
+  document.getElementById('bilanDefisTous').checked = option === 'tous';
+  document.getElementById('bilanDefisReussis').checked = option === 'reussis';
+  const b = majTotauxBilan();
+  grille.innerHTML = '';
+  b.mois.forEach((ch, i) => {
+    const carte = document.createElement('div');
+    carte.className = 'card bilan-mois' + (ch ? '' : ' bilan-vide');
+    const h3 = document.createElement('h3');
+    h3.textContent = MONTH_NAMES[i];
+    carte.appendChild(h3);
+    const table = document.createElement('table');
+    table.className = 'bilan-table';
+    const v = x => ch ? euro(x) : '–';
+    table.appendChild(ligneBilan('Épargne', v(ch && ch.epargne)));
+    table.appendChild(ligneBilan('Économie', v(ch && ch.economie)));
+    table.appendChild(ligneBilan('Total', v(ch && ch.total), 'bilan-total'));
+    table.appendChild(ligneBilan('Dépenses', v(ch && ch.depenses)));
+    let gains = '–';
+    if (ch){
+      // la valeur telle que tapée (et non le nombre arrondi), pour la retrouver à l'identique
+      const data = lireMoisEnregistre(cleDuMois(anneeBilan, i + 1));
+      gains = document.createElement('input');
+      gains.type = 'number'; gains.step = '0.01'; gains.inputMode = 'decimal'; gains.placeholder = '0';
+      gains.className = 'bilan-gains';
+      gains.dataset.cle = cleDuMois(anneeBilan, i + 1);
+      gains.value = ((data && data.standalone) || {}).gainsInput || '';
+    }
+    table.appendChild(ligneBilan('Gains', gains));
+    carte.appendChild(table);
+    grille.appendChild(carte);
+  });
+}
+
+function brancherBilan(){
+  const grille = document.getElementById('bilanGrille');
+  if (!grille) return;
+  // Taper un gain : enregistré aussitôt ; seuls les totaux du bas bougent (la case garde la main)
+  grille.addEventListener('input', e => {
+    if (!e.target.classList.contains('bilan-gains')) return;
+    ecrireGainsDuMois(e.target.dataset.cle, e.target.value);
+    majTotauxBilan();
+  });
+  const changer = sens => { anneeBilan += sens; afficherBilan(); };
+  document.getElementById('bilanAnneePrec').addEventListener('click', () => changer(-1));
+  document.getElementById('bilanAnneeSuiv').addEventListener('click', () => changer(1));
+  // Deux cases qui s'excluent : en cocher une décoche l'autre ; tout décocher = défis non comptés
+  const choisir = (valeur, cochee) => {
+    try { localStorage.setItem(BILAN_DEFIS_KEY, cochee ? valeur : ''); } catch(e){}
+    afficherBilan();
+  };
+  document.getElementById('bilanDefisTous').addEventListener('change', e => choisir('tous', e.target.checked));
+  document.getElementById('bilanDefisReussis').addEventListener('change', e => choisir('reussis', e.target.checked));
+  // À chaque ouverture de la page : les chiffres du mois en cours sont à jour
+  const onglet = document.querySelector('nav.tabs button[data-tab="p6"]');
+  if (onglet) onglet.addEventListener('click', () => afficherBilan());
+}
+
 /* ---------- events ---------- */
 document.addEventListener('input', e=>{
   if (e.target.matches('.standalone')){
@@ -4510,6 +4729,8 @@ brancherCalendrier();
 afficherCalendrier();
 brancherEnveloppes();
 afficherEnveloppes();
+brancherBilan();
+afficherBilan();
 
 if (bilanMigration && bilanMigration.corriges){
   showDataBanner('✓ Tes données ont été mises à jour automatiquement — '
