@@ -838,7 +838,7 @@ footer{
       <label><input type="checkbox" id="bilanDefisTous"> Compter les défis</label>
       <label><input type="checkbox" id="bilanDefisReussis"> Compter les défis réussis</label>
     </div>
-    <p class="cal-aide">Tout se remplit seul avec les pages 4 et 5 de chaque mois. Seuls les gains se notent ici, si tu en as.</p>
+    <p class="cal-aide">Tout se remplit seul avec les pages 4 et 5 de chaque mois. L'épargne, c'est ton épargne court terme (dépôts moins retraits). Seuls les gains se notent ici, si tu en as.</p>
   </div>
   <div class="cal-grille bilan-grille" id="bilanGrille"></div>
   <div class="card bilan-totaux">
@@ -1388,7 +1388,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-15 (27)";
+const BUILD_VERSION = "2026-11-15 (28)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -4343,8 +4343,9 @@ function depensesEnveloppesDonnees(data){
 }
 
 /* Les quatre lignes d'un mois (plus les gains), ou null pour un mois jamais ouvert.
-   - Épargne  = dépôts − retraits des épargnes court et long terme (page 5), plus les défis si
-                l'une des deux cases est cochée ;
+   - Épargne  = dépôts − retraits de l'épargne COURT TERME seulement (page 5), plus les défis si
+                l'une des deux cases est cochée. Le long terme n'est pas compté (demande de Maman,
+                2026-11-15) : c'est une épargne bloquée, à l'objectif différent ;
    - Économie = « Fin du mois, combien me reste-t-il ? » (page 4) ;
    - Total    = Épargne + Économie (les gains n'y entrent pas : choix de Luigi) ;
    - Dépenses = « Fin du mois, combien j'ai dépensé ? » (page 4). */
@@ -4352,9 +4353,9 @@ function chiffresDuMois(data, defis){
   if (!data || !data.tables) return null;
   const tables = data.tables;
   let epargne = 0;
-  ENVELOPE_TABLES.forEach(id => (tables[id] || []).forEach(rd => {
+  (tables['tbl-epargne-ct'] || []).forEach(rd => {
     if (rd) epargne += num(depotEnregistre(rd) || '') - num(rd.retrait || '');
-  }));
+  });
   if (defis === 'tous' || defis === 'reussis'){
     (tables['tbl-defis'] || []).forEach(rd => {
       if (rd && (defis === 'tous' || rd.check === true)) epargne += num(rd.montant || '');
