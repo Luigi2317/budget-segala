@@ -263,10 +263,16 @@ button.add-row-btn:hover{background:var(--navy);}
 .bilan-table tr.bilan-total th, .bilan-table tr.bilan-total td{font-weight:bold;}
 .bilan-table input.bilan-gains{width:6em; text-align:right; border:1px solid var(--sea); border-radius:5px; padding:3px 6px; font-family:inherit; font-size:1em;}
 .bilan-mois.bilan-vide{opacity:.6;}
+.bilan-mois.bilan-hors{opacity:.4;}
+.bilan-periode{display:flex; flex-wrap:wrap; gap:8px 10px; justify-content:center; align-items:center; color:var(--navy); font-weight:bold; margin-bottom:8px;}
+.bilan-periode select{padding:5px 8px; border:1px solid var(--sea); border-radius:6px; font-family:inherit; font-size:1em; background:#fff; color:var(--navy);}
 .bilan-defis{display:flex; flex-wrap:wrap; gap:8px 22px; justify-content:center; color:var(--navy); font-weight:bold;}
 .bilan-defis label{cursor:pointer;}
 .bilan-totaux{display:flex; flex-wrap:wrap; gap:14px 22px; justify-content:center;}
 .bilan-cadre{display:flex; flex-direction:column; align-items:center; gap:6px; font-weight:bold; color:var(--navy);}
+/* le chiffre qui répond à « combien j'ai à la fin de l'année » : mis en avant */
+.bilan-cadre-total{font-size:1.15em;}
+.bilan-cadre-total .summary-box{border-width:3px;}
 
 .summary-box{
   display:inline-block; min-width:140px; padding:8px 14px; border:2px solid var(--coral);
@@ -834,18 +840,25 @@ footer{
       <span id="bilanAnnee"></span>
       <button type="button" class="cal-nav" id="bilanAnneeSuiv" title="Année suivante">›</button>
     </div>
+    <div class="bilan-periode">
+      <label for="bilanDebut">Bilan de</label>
+      <select id="bilanDebut"></select>
+      <label for="bilanFin">à</label>
+      <select id="bilanFin"></select>
+    </div>
     <div class="bilan-defis">
       <label><input type="checkbox" id="bilanDefisTous"> Compter les défis</label>
       <label><input type="checkbox" id="bilanDefisReussis"> Compter les défis réussis</label>
     </div>
-    <p class="cal-aide">Tout se remplit seul avec les pages 4 et 5 de chaque mois. L'épargne, c'est ton épargne court terme (dépôts moins retraits). Seuls les gains se notent ici, si tu en as.</p>
+    <p class="cal-aide">Choisis les mois de ton bilan (par défaut, toute l'année) : les autres mois ne comptent pas. Tout se remplit seul avec les pages 4 et 5 de chaque mois. L'épargne, c'est ton épargne court terme (dépôts moins retraits). Seuls les gains se notent ici, si tu en as.</p>
   </div>
   <div class="cal-grille bilan-grille" id="bilanGrille"></div>
   <div class="card bilan-totaux">
     <div class="bilan-cadre"><span>J'ai épargné</span><span class="summary-box" id="bilanTotEpargne">0,00 €</span></div>
     <div class="bilan-cadre"><span>J'ai économisé</span><span class="summary-box" id="bilanTotEconomie">0,00 €</span></div>
+    <div class="bilan-cadre bilan-cadre-total"><span>Total de l'année</span><span class="summary-box" id="bilanTotTotal">0,00 €</span></div>
     <div class="bilan-cadre"><span>J'ai dépensé</span><span class="summary-box" id="bilanTotDepenses">0,00 €</span></div>
-    <div class="bilan-cadre"><span>J'ai gagné</span><span class="summary-box" id="bilanTotGains">0,00 €</span></div>
+    <div class="bilan-cadre"><span>Mes gains</span><span class="summary-box" id="bilanTotGains">0,00 €</span></div>
   </div>
 
   <!-- Ancienne « Synthèse des enveloppes » : cachée et non supprimée (2026-11-15). Sa case Gains
@@ -1388,7 +1401,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-15 (28)";
+const BUILD_VERSION = "2026-11-16 (29)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1731,9 +1744,13 @@ let currentMonth, firstMonth;
 const DATA_VERSION = 5;
 let dataVersion = 0;
 let carnetNeuf = false;   // vrai uniquement à la toute première ouverture d'un compte
+/* Période du Bilan annuel (page 6), une par année : { "2026": { debut: 11, fin: 12 } }.
+   Rangée avec les autres réglages du compte (colonne meta de budget_settings) : gardée sur tous
+   les appareils, sans rien changer à la base. Une année absente = de janvier à décembre. */
+let bilanPeriodes = {};
 
 function saveMeta(){
-  try { localStorage.setItem(META_KEY, JSON.stringify({firstMonth, currentMonth, dataVersion})); } catch(e){}
+  try { localStorage.setItem(META_KEY, JSON.stringify({firstMonth, currentMonth, dataVersion, bilanPeriodes})); } catch(e){}
 }
 
 /* Renvoie un compte rendu si quelque chose a été réparé, sinon null. */
@@ -1765,6 +1782,7 @@ function loadMeta(){
       firstMonth = meta.firstMonth;
       currentMonth = meta.currentMonth || meta.firstMonth;
       dataVersion = Number(meta.dataVersion) || 0;
+      bilanPeriodes = (meta.bilanPeriodes && typeof meta.bilanPeriodes === 'object') ? meta.bilanPeriodes : {};
       return;
     } catch(e){ /* corrupt meta, fall through to fresh start */ }
   }
@@ -4371,18 +4389,47 @@ function chiffresDuMois(data, defis){
 
 function cleDuMois(annee, mois){ return annee + '-' + String(mois).padStart(2, '0'); }
 
+/* Période du bilan pour une année (idée de Luigi, 2026-11-16) : du mois « debut » au mois « fin »,
+   toujours dans la même année. Par défaut janvier → décembre. Garde-fous : un mois hors de 1-12 ou
+   illisible reprend sa valeur par défaut ; une fin avant le début est ramenée au début (il reste
+   toujours au moins un mois). */
+function periodeDuBilan(periodes, annee){
+  const p = (periodes && periodes[String(annee)]) || {};
+  const lire = (v, defaut) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 12 ? n : defaut; };
+  const debut = lire(p.debut, 1);
+  const fin = Math.max(lire(p.fin, 12), debut);
+  return { debut, fin };
+}
+
 /* Les 12 mois d'une année et les totaux du bas. lireMois(cle) rend les données d'un mois (ou null) :
-   passée en paramètre, elle permet de tester le calcul sans navigateur. */
-function bilanDeLAnnee(lireMois, annee, defis){
+   passée en paramètre, elle permet de tester le calcul sans navigateur. Un mois hors de la période
+   vaut null, comme un mois jamais ouvert : il n'est compté nulle part. horsPeriode[i] dit lequel des
+   deux, pour l'affichage. */
+function bilanDeLAnnee(lireMois, annee, defis, periode){
+  const per = periode || { debut: 1, fin: 12 };
   const mois = [];
-  const totaux = { epargne: 0, economie: 0, depenses: 0, gains: 0 };
+  const horsPeriode = [];
+  // total = somme des « Total » des mois (épargne + économie) : le « Total de l'année » (2026-11-16)
+  const totaux = { epargne: 0, economie: 0, total: 0, depenses: 0, gains: 0 };
   for (let m = 1; m <= 12; m++){
-    const ch = chiffresDuMois(lireMois(cleDuMois(annee, m)), defis);
+    const hors = m < per.debut || m > per.fin;
+    const ch = hors ? null : chiffresDuMois(lireMois(cleDuMois(annee, m)), defis);
     mois.push(ch);
+    horsPeriode.push(hors);
     if (ch) Object.keys(totaux).forEach(k => { totaux[k] += ch[k]; });
   }
   Object.keys(totaux).forEach(k => { totaux[k] = Math.round(totaux[k] * 100) / 100; });
-  return { mois, totaux };
+  return { mois, horsPeriode, totaux };
+}
+
+/* Enregistre la période choisie pour une année dans les réglages du compte. Janvier → décembre est
+   la valeur par défaut : on retire alors l'année de la liste plutôt que de la stocker. */
+function choisirPeriodeBilan(annee, debut, fin){
+  const per = periodeDuBilan({ [annee]: { debut, fin } }, annee);
+  if (per.debut === 1 && per.fin === 12) delete bilanPeriodes[String(annee)];
+  else bilanPeriodes[String(annee)] = per;
+  saveMeta();
+  if (window.__syncToCloud) window.__syncToCloud();
 }
 
 function lireMoisEnregistre(cle){
@@ -4414,9 +4461,10 @@ function ecrireGainsDuMois(cle, valeur){
 }
 
 function majTotauxBilan(){
-  const b = bilanDeLAnnee(lireMoisEnregistre, anneeBilan, lireOptionDefis());
+  const b = bilanDeLAnnee(lireMoisEnregistre, anneeBilan, lireOptionDefis(), periodeDuBilan(bilanPeriodes, anneeBilan));
   setMoneyCell(document.getElementById('bilanTotEpargne'), b.totaux.epargne);
   setMoneyCell(document.getElementById('bilanTotEconomie'), b.totaux.economie);
+  setMoneyCell(document.getElementById('bilanTotTotal'), b.totaux.total);
   setMoneyCell(document.getElementById('bilanTotDepenses'), b.totaux.depenses);
   setMoneyCell(document.getElementById('bilanTotGains'), b.totaux.gains);
   return b;
@@ -4441,11 +4489,18 @@ function afficherBilan(){
   const option = lireOptionDefis();
   document.getElementById('bilanDefisTous').checked = option === 'tous';
   document.getElementById('bilanDefisReussis').checked = option === 'reussis';
+  const per = periodeDuBilan(bilanPeriodes, anneeBilan);
+  [['bilanDebut', per.debut], ['bilanFin', per.fin]].forEach(([id, valeur]) => {
+    const sel = document.getElementById(id);
+    if (!sel.options.length) MONTH_NAMES.forEach((nom, i) => sel.add(new Option(nom, String(i + 1))));
+    sel.value = String(valeur);
+  });
   const b = majTotauxBilan();
   grille.innerHTML = '';
   b.mois.forEach((ch, i) => {
     const carte = document.createElement('div');
-    carte.className = 'card bilan-mois' + (ch ? '' : ' bilan-vide');
+    carte.className = 'card bilan-mois' + (ch ? '' : ' bilan-vide') + (b.horsPeriode[i] ? ' bilan-hors' : '');
+    if (b.horsPeriode[i]) carte.title = 'Hors de la période du bilan';
     const h3 = document.createElement('h3');
     h3.textContent = MONTH_NAMES[i];
     carte.appendChild(h3);
@@ -4489,6 +4544,14 @@ function brancherBilan(){
     try { localStorage.setItem(BILAN_DEFIS_KEY, cochee ? valeur : ''); } catch(e){}
     afficherBilan();
   };
+  // Période : chaque changement est enregistré pour l'année affichée, puis le bilan est redessiné
+  // (une fin placée avant le début revient au début : periodeDuBilan s'en charge)
+  const changerPeriode = () => {
+    choisirPeriodeBilan(anneeBilan, Number(document.getElementById('bilanDebut').value), Number(document.getElementById('bilanFin').value));
+    afficherBilan();
+  };
+  document.getElementById('bilanDebut').addEventListener('change', changerPeriode);
+  document.getElementById('bilanFin').addEventListener('change', changerPeriode);
   document.getElementById('bilanDefisTous').addEventListener('change', e => choisir('tous', e.target.checked));
   document.getElementById('bilanDefisReussis').addEventListener('change', e => choisir('reussis', e.target.checked));
   // À chaque ouverture de la page : les chiffres du mois en cours sont à jour
