@@ -671,13 +671,6 @@ footer{
       <span class="summary-box" id="restantSalaireBox" data-value="0" style="font-size:1.15em;">0,00 €</span>
     </div>
     <p class="cal-aide">Revenus − crédits − charges fixes − charges variables − montants des enveloppes. C'est ce montant que tu répartis dans tes épargnes (page 5).</p>
-    <!-- Reste à répartir (demande de Maman, 2026-11-18) : ce qui n'est pas encore placé dans un
-         « Dépôt ce mois » de la page 5 (court et long terme). -->
-    <div class="flex-row">
-      <label>Reste à répartir :</label>
-      <span class="summary-box" id="resteARepartirBox" data-value="0">0,00 €</span>
-    </div>
-    <p class="cal-aide">Reste à épargner − tes dépôts du mois (page 5, court et long terme). À 0 €, tout est réparti.</p>
   </div>
 
   <!-- Les tableaux d'avant (2026-11-12) restent dans la page, CACHÉS : leurs données continuent
@@ -747,11 +740,42 @@ footer{
 <section class="page" id="p5">
   <div class="card">
     <h2><span class="num-badge">5</span> Épargnes et Défis</h2>
-    <div class="flex-row">
-      <label>Reste à répartir dans tes épargnes :</label>
-      <span class="summary-box" id="resteARepartirBox5" data-value="0">0,00 €</span>
+    <!-- Ordre du calcul, validé par Maman (2026-11-18) : le Reste à épargner (page 4), moins les épargnes
+         long terme (le prélèvement du mois), donne le Reste à répartir, que l'on place en court terme et
+         en défis. Le tableau long terme est le même qu'avant : seul son emplacement a changé. -->
+    <h3 style="color:var(--navy); margin-top:6px;">Épargnes long terme <span style="font-weight:normal; font-size:.85em;">(prélevées chaque mois)</span></h3>
+    <p class="cal-aide" style="margin-top:0;">Les épargnes mises de côté chaque mois, comme un prélèvement (un PEL par exemple). Leurs dépôts du mois sont retirés du reste à épargner : ce qui reste est à répartir ci-dessous.</p>
+    <div class="table-scroll">
+      <table class="budget-table" id="tbl-epargne-lt">
+        <thead><tr>
+          <th>Description</th><th>Objectif</th><th>Déjà épargné</th>
+          <th>Dépôt<br>ce mois</th><th>Retrait<br>ce mois</th><th>Montant total</th>
+          <th>Progression</th><th>✓</th><th hidden></th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><td>Total</td>
+          <td id="tbl-epargne-lt-tot-objectif" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-start" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-depot" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-retrait" class="num" data-value="0">0,00 €</td>
+          <td id="tbl-epargne-lt-tot-end" class="num" data-value="0">0,00 €</td>
+          <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" id="tbl-epargne-lt-tot-progress-fill" style="width:0%;"></div></div><span class="mini-gauge-pct" id="tbl-epargne-lt-tot-progress-pct">0%</span></td>
+          <td>—</td><td hidden></td><td></td></tr></tfoot>
+      </table>
     </div>
-    <h3 style="color:var(--navy);">Épargnes court terme</h3>
+    <button type="button" class="add-row-btn" data-table="tbl-epargne-lt">+ Ajouter</button>
+    <span id="tbl-epargne-lt-tot-netmovement" data-value="0" style="display:none;"></span>
+
+    <!-- « À répartir » : ce qu'il y a à placer en court terme et en défis. Ne dépend que de ce qui est
+         au-dessus (le Reste à épargner de la page 4 et le long terme). -->
+    <div class="flex-row" style="margin-top:14px;">
+      <label>À répartir :</label>
+      <span class="summary-box" id="aRepartirBox" data-value="0" style="font-size:1.15em;">0,00 €</span>
+    </div>
+    <p class="cal-aide" id="aRepartirDetail"></p>
+    <p class="cal-aide" style="margin-top:2px;">C'est ce que tu répartis dans tes épargnes court terme et tes défis, ci-dessous.</p>
+
+    <h3 style="color:var(--navy); margin-top:22px;">Épargnes court terme</h3>
     <div class="threshold-legend">
       <span class="legend-item"><span class="threshold-dot dot-red"></span> Moins de 20 % de l'objectif</span>
       <span class="legend-item"><span class="threshold-dot dot-orange"></span> De 20 % à 50 %</span>
@@ -779,27 +803,6 @@ footer{
     <button type="button" class="add-row-btn" data-table="tbl-epargne-ct">+ Ajouter</button>
     <span id="tbl-epargne-ct-tot-netmovement" data-value="0" style="display:none;"></span>
 
-    <h3 style="color:var(--navy); margin-top:24px;">Épargnes long terme</h3>
-    <div class="table-scroll">
-      <table class="budget-table" id="tbl-epargne-lt">
-        <thead><tr>
-          <th>Description</th><th>Objectif</th><th>Déjà épargné</th>
-          <th>Dépôt<br>ce mois</th><th>Retrait<br>ce mois</th><th>Montant total</th>
-          <th>Progression</th><th>✓</th><th hidden></th><th></th>
-        </tr></thead>
-        <tbody></tbody>
-        <tfoot><tr><td>Total</td>
-          <td id="tbl-epargne-lt-tot-objectif" class="num" data-value="0">0,00 €</td>
-          <td id="tbl-epargne-lt-tot-start" class="num" data-value="0">0,00 €</td>
-          <td id="tbl-epargne-lt-tot-depot" class="num" data-value="0">0,00 €</td>
-          <td id="tbl-epargne-lt-tot-retrait" class="num" data-value="0">0,00 €</td>
-          <td id="tbl-epargne-lt-tot-end" class="num" data-value="0">0,00 €</td>
-          <td class="progress-cell"><div class="mini-gauge-track"><div class="mini-gauge-fill" id="tbl-epargne-lt-tot-progress-fill" style="width:0%;"></div></div><span class="mini-gauge-pct" id="tbl-epargne-lt-tot-progress-pct">0%</span></td>
-          <td>—</td><td hidden></td><td></td></tr></tfoot>
-      </table>
-    </div>
-    <button type="button" class="add-row-btn" data-table="tbl-epargne-lt">+ Ajouter</button>
-    <span id="tbl-epargne-lt-tot-netmovement" data-value="0" style="display:none;"></span>
 
     <h3 style="color:var(--navy); margin-top:20px;">Défis</h3>
     <div class="table-scroll">
@@ -812,6 +815,14 @@ footer{
       </table>
     </div>
     <button type="button" class="add-row-btn" data-table="tbl-defis">+ Ajouter</button>
+
+    <!-- « Reste à répartir » : ce qu'il reste à placer une fois le court terme et les défis remplis. -->
+    <div class="flex-row" style="margin-top:18px;">
+      <label>Reste à répartir :</label>
+      <span class="summary-box" id="resteARepartirBox5" data-value="0" style="font-size:1.15em;">0,00 €</span>
+    </div>
+    <p class="cal-aide" id="resteARepartirDetail"></p>
+    <p class="cal-aide" style="margin-top:2px;">À 0 €, tout est réparti.</p>
 
     <div class="flex-row" style="margin-top:18px;">
       <label>Reste sur le compte :</label>
@@ -1412,7 +1423,7 @@ const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colon
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-18 (30)";
+const BUILD_VERSION = "2026-11-18 (31)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* ---------- helpers ---------- */
@@ -1625,11 +1636,12 @@ function recalcTable(tableId){
 const ALL_TABLE_IDS = Object.keys(ADDABLE_TABLES).concat(['tbl-repartition']);
 
 /* ---------- cross-table derived values ---------- */
-/* Reste à répartir (2026-11-18) : le Reste à épargner moins ce qui est déjà placé en « Dépôt ce mois »
-   dans les épargnes court et long terme. Arrondi au centime (restes de calcul à virgule). Négatif =
-   plus de dépôts que de reste à épargner. */
-function resteARepartir(resteAEpargner, depotsCourtTerme, depotsLongTerme){
-  return Math.round((resteAEpargner - depotsCourtTerme - depotsLongTerme) * 100) / 100;
+/* Reste à répartir (2026-11-18, défis ajoutés en version 31) : le Reste à épargner moins ce qui est
+   déjà placé ce mois-ci — dépôts des épargnes long terme (le prélèvement du mois, page 4), dépôts des
+   épargnes court terme et montants des défis (page 5 : les défis sont une autre façon d'épargner).
+   Arrondi au centime (restes de calcul à virgule). Négatif = plus placé que le reste à épargner. */
+function resteARepartir(resteAEpargner, depotsCourtTerme, depotsLongTerme, defis){
+  return Math.round((resteAEpargner - depotsCourtTerme - depotsLongTerme - (defis || 0)) * 100) / 100;
 }
 
 function updateDerived(){
@@ -1640,10 +1652,18 @@ function updateDerived(){
   const enveloppesBudget = getTotal('tbl-enveloppes','budget');
   const restant = revenusReel - creditsReel - chargesFixesReel - chargesVarReel - enveloppesBudget;
   setMoneyCell(document.getElementById('restantSalaireBox'), restant);
-  // ce qui reste à placer : le Reste à épargner moins les dépôts du mois (court et long terme)
-  const aRepartir = resteARepartir(restant, getTotal('tbl-epargne-ct', 'depot'), getTotal('tbl-epargne-lt', 'depot'));
-  setMoneyCell(document.getElementById('resteARepartirBox'), aRepartir);
-  setMoneyCell(document.getElementById('resteARepartirBox5'), aRepartir);
+  // ce qui reste à placer : le Reste à épargner moins le long terme, le court terme et les défis du mois
+  const depotsCT = getTotal('tbl-epargne-ct', 'depot'), depotsLT = getTotal('tbl-epargne-lt', 'depot'), defis = getTotal('tbl-defis', 'montant');
+  // « À répartir » (après le long terme) puis « Reste à répartir » (après les défis) : chaque ligne de
+  // détail ne cite que des chiffres affichés AU-DESSUS d'elle (textContent : rien n'est interprété comme du HTML)
+  const aRepartir = resteARepartir(restant, 0, depotsLT, 0);
+  setMoneyCell(document.getElementById('aRepartirBox'), aRepartir);
+  setMoneyCell(document.getElementById('resteARepartirBox5'), resteARepartir(restant, depotsCT, depotsLT, defis));
+  const detail1 = document.getElementById('aRepartirDetail');
+  if (detail1) detail1.textContent = '= Reste à épargner ' + euro(restant) + ' (page 4) − épargnes long terme ' + euro(depotsLT);
+  const detail2 = document.getElementById('resteARepartirDetail');
+  if (detail2) detail2.textContent = '= À répartir ' + euro(aRepartir) + ' − dépôts des épargnes court terme ' + euro(depotsCT)
+    + ' − défis ' + euro(defis);
 
   // depuis le 2026-11-12, les dépenses viennent des semaines de chaque enveloppe (page 4),
   // et non plus de l'ancien suivi hebdo, désormais caché
