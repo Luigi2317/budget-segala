@@ -1,6 +1,6 @@
 {
-  "name": "Budget Ségala",
-  "short_name": "Budget Ségala",
+  "name": "Mon Budget",
+  "short_name": "Mon Budget",
   "description": "Outil de gestion de budget familial, thème Bretagne",
   "start_url": "./",
   "scope": "./",
