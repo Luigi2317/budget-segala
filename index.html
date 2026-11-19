@@ -347,6 +347,8 @@ footer{
 }
 .modal-header h3{color:var(--navy); margin:0;}
 .modal-close{background:none; border:none; font-size:1.3em; color:var(--navy); cursor:pointer; line-height:1;}
+/* Mode démo (version 33) : la barre du haut change de couleur, pour qu'on ne confonde jamais avec un vrai carnet */
+body.mode-demo #logoutBar{background:#8a4b14;}
 /* Mode d'emploi (2026-11-18) : s'ouvre aussi depuis l'écran de connexion, d'où sa place hors de l'app */
 #aideModal{z-index:600;}
 #aideModal .modal-box{max-width:720px; max-height:88vh; font-family:Georgia,'Times New Roman',serif; color:#22303c; line-height:1.5;}
@@ -354,7 +356,10 @@ footer{
 #aideModal p{margin:6px 0;}
 #aideModal ul, #aideModal ol{margin:4px 0 8px; padding-left:22px;}
 #aideModal li{margin:3px 0;}
-button.aide-lien{display:block; margin:14px auto 0; background:none; border:none; color:#1f6f8b; text-decoration:underline; cursor:pointer; font-family:inherit; font-size:.95em;}
+a.aide-lien{text-align:center;}
+/* sur l'écran de connexion, le style des boutons (#authGate button) l'emporterait : on garde l'aspect d'un lien */
+#authGate button.aide-lien{background:none; border:none; color:#1f6f8b; padding:0; width:auto; flex:none; border-radius:0; box-shadow:none; font-weight:normal;}
+button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none; border:none; color:#1f6f8b; text-decoration:underline; cursor:pointer; font-family:inherit; font-size:.95em;}
 /* Fenêtre de choix (montant reporté, suppression d'une ligne) : de gros boutons, faciles à toucher */
 .choix-texte{color:var(--navy); line-height:1.45; margin:12px 0 4px; white-space:pre-line;}
 .choix-note{color:var(--navy); opacity:.75; font-size:.9em; margin:0 0 14px; white-space:pre-line;}
@@ -456,6 +461,7 @@ button.aide-lien{display:block; margin:14px auto 0; background:none; border:none
     </div>
     <div id="authMessage"></div>
     <button type="button" class="aide-lien" data-aide>📖 Mode d'emploi</button>
+    <a class="aide-lien" href="?demo">👀 Voir la démo (carnet fictif, sans compte)</a>
   </div>
 </div>
 
@@ -1491,10 +1497,147 @@ const SAVES_KEY = "budgetSegala_saves_v1";
 const DESC_TEMPLATE_KEY = "budgetSegala_descTemplate_v1";
 const CALENDRIER_KEY = "budgetSegala_calendrier_v1";            // page 9, colonne Supabase « calendrier »
 const CALENDRIER_A_ENVOYER_KEY = "budgetSegala_calendrier_aEnvoyer"; // '1' tant que le compte n'a pas la dernière version
+
+/* ---------- Mode démo (version 33) ----------
+   Adresse terminée par ?demo (ou bouton « Voir la démo ») : l'app s'ouvre sur un carnet FICTIF.
+   Toute l'app lit et écrit dans « localStorage » : en mode démo, ce nom désigne ici une mémoire
+   temporaire (déclarée dans cette fonction, elle masque celle du navigateur), pré-remplie par
+   carnetDemo(). Rien n'est donc écrit dans le navigateur, et le script de connexion ne démarre pas
+   (il lit window.__modeDemo) : rien ne part vers Supabase. Fermer la page efface tout. */
+const MODE_DEMO = /[?&]demo(?:[=&]|$)/.test(location.search);
+window.__modeDemo = MODE_DEMO;
+const localStorage = MODE_DEMO ? creerStockageDemo() : window.localStorage;
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-18 (32)";
+const BUILD_VERSION = "2026-11-19 (33)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
+
+/* Une mémoire qui se comporte comme localStorage (mêmes fonctions), remplie au premier usage :
+   le remplissage attend que toutes les constantes de l'app soient prêtes (DATA_VERSION…). */
+function creerStockageDemo(){
+  const donnees = {};
+  let rempli = false;
+  const remplir = () => { if (!rempli){ rempli = true; Object.assign(donnees, carnetDemo(new Date())); } };
+  const a = k => Object.prototype.hasOwnProperty.call(donnees, k);
+  return {
+    get length(){ remplir(); return Object.keys(donnees).length; },
+    key(i){ remplir(); const k = Object.keys(donnees); return i >= 0 && i < k.length ? k[i] : null; },
+    getItem(k){ remplir(); return a(k) ? donnees[k] : null; },
+    setItem(k, v){ remplir(); donnees[k] = String(v); },
+    removeItem(k){ remplir(); delete donnees[k]; },
+    clear(){ rempli = true; Object.keys(donnees).forEach(k => { delete donnees[k]; }); }
+  };
+}
+
+/* Le carnet fictif : les 6 derniers mois jusqu'au mois de « aujourd'hui », pour que la démo soit
+   toujours à jour. Une personne seule en location : salaire 2 100 €, crédit auto, charges fixes,
+   5 enveloppes, épargnes long et court terme, défis, un gain, un calendrier. Les montants varient
+   un peu d'un mois à l'autre (coefficients fixes : pas de hasard, la démo est la même pour tous).
+   Chaque mois passé est entièrement réparti (Reste à répartir = 0 €) ; le mois en cours garde
+   30 € à répartir et n'a de dépenses que jusqu'à la semaine en cours, pour montrer un mois vivant.
+   Renvoie un objet { clé de stockage : texte JSON }, au format exact de saveState. */
+function carnetDemo(aujourdhui){
+  const N = 6;
+  const cle = (y, m) => y + '-' + String(m).padStart(2, '0');
+  const mois = [];
+  let y = aujourdhui.getFullYear(), m = aujourdhui.getMonth() + 1;
+  for (let i = 0; i < N; i++){ mois.unshift({ y, m }); m--; if (m < 1){ m = 12; y--; } }
+  const ar = x => (Math.round(x * 100) / 100).toFixed(2).replace(/\.00$/, '');
+  const ligne = (desc, champs) => Object.assign({ desc }, champs);
+  const coef = [1, 1.04, 0.97, 1.08, 0.95, 1.02];
+  const semaineEnCours = Math.min(4, Math.floor((aujourdhui.getDate() - 1) / 7) + 1);
+
+  const enveloppes = [
+    ['Courses', 400, [96.4, 104.2, 88.7, 101.3]],
+    ['Essence', 120, [58, 0, 61.5, 0]],
+    ['Loisirs', 80, [0, 35, 22.5, 18]],
+    ['Cadeaux', 40, [0, 0, 25, 0]],
+    ['Santé', 30, [0, 12.5, 0, 0]]
+  ];
+  const ct = [['Vacances', 1500, 400], ['Épargne de précaution', 3000, 1200], ['Noël', 400, 100]];
+  const lt = [['PEL', 10000, 3200, 100], ['Assurance vie', 5000, 1500, 50]];
+  const soldesCT = ct.map(c => c[2]), soldesLT = lt.map(l => l[2]);
+  let cumulDefis = 0;
+
+  const sortie = {};
+  sortie[META_KEY] = JSON.stringify({ firstMonth: cle(mois[0].y, mois[0].m), currentMonth: cle(mois[N - 1].y, mois[N - 1].m),
+    dataVersion: DATA_VERSION, bilanPeriodes: {} });
+
+  mois.forEach((mm, i) => {
+    const enCours = i === N - 1;
+    const pharmacie = [12.5, 24.9, 18.2, 9.9, 22.4, 15.6][i];
+    const coiffeur = i % 2 === 1 ? 25 : 0;
+    const resteAEpargner = 2150 - 180 - 900 - pharmacie - coiffeur - 670;
+    const defis = 30 + (i % 2 === 0 ? 15 : 0);
+    const placeCT = resteAEpargner - 150 - defis - (enCours ? 30 : 0);
+    const depotsCT = [90, placeCT - 130, 40];
+    const tables = {
+      'tbl-revenus': [ligne('Salaire', { budget: '2100', reel: '2100', check: true }),
+                      ligne('Prime transport', { budget: '50', reel: '50', check: true })],
+      'tbl-credits': [ligne('Crédit auto', { date: '05', budget: '180', reel: '180', check: true })],
+      'tbl-charges-fixes': [['Loyer', 650, '01'], ['Électricité', 85, '10'], ['Internet et mobile', 40, '12'],
+        ['Assurance habitation', 25, '15'], ['Assurance auto', 45, '15'], ['Mutuelle', 55, '20']]
+        .map(([d, b, j]) => ligne(d, { date: j, budget: String(b), reel: String(b), check: true })),
+      'tbl-charges-var': [ligne('Pharmacie', { budget: '20', reel: ar(pharmacie) }),
+                          ligne('Coiffeur', { budget: '25', reel: coiffeur ? '25' : '' })],
+      'tbl-enveloppes': enveloppes.map(([d, b, sem]) => ligne(d, { budget: String(b),
+        depenses: sem.map((v, w) => (v && (!enCours || w < semaineEnCours)) ? ar(v * coef[i]) : '') })),
+      'tbl-epargne-ct': ct.map(([d, obj, depart], k) => ligne(d, { objectif: String(obj),
+        startBalance: i === 0 ? String(depart) : ar(soldesCT[k]), startAuto: i > 0, depot: ar(depotsCT[k]), retrait: '' })),
+      'tbl-epargne-lt': lt.map(([d, obj, depart, dep], k) => ligne(d, { objectif: String(obj),
+        startBalance: i === 0 ? String(depart) : ar(soldesLT[k]), startAuto: i > 0, depot: String(dep), retrait: '' })),
+      'tbl-defis': [ligne('Une semaine sans resto', { montant: '30', check: true }),
+                    ligne('La monnaie de côté', { montant: i % 2 === 0 ? '15' : '', check: i % 2 === 0 })]
+    };
+    const debutCT = soldesCT.reduce((s, v) => s + v, 0), debutLT = soldesLT.reduce((s, v) => s + v, 0);
+    const standalone = {
+      gainsInput: i === N - 3 ? '60' : '',
+      resteCompte: ar(245.3 + i * 12.4),
+      'livretCT-debut': ar(debutCT), 'livretCT-epargne': ar(depotsCT.reduce((s, v) => s + v, 0)), 'livretCT-depense': '',
+      'livretLT-debut': ar(debutLT), 'livretLT-epargne': '150', 'livretLT-depense': '',
+      'livretDefis-debut': ar(cumulDefis), 'livretDefis-epargne': ar(defis), 'livretDefis-depense': ''
+    };
+    depotsCT.forEach((v, k) => { soldesCT[k] += v; });
+    lt.forEach((l, k) => { soldesLT[k] += l[3]; });
+    cumulDefis += defis;
+    sortie[DATA_PREFIX + cle(mm.y, mm.m)] = JSON.stringify({ tables, standalone, reportsFaits: true });
+  });
+
+  // le modèle de lignes : chaque ligne existe depuis le premier mois de la démo
+  const depuis = cle(mois[0].y, mois[0].m);
+  const dernier = JSON.parse(sortie[DATA_PREFIX + cle(mois[N - 1].y, mois[N - 1].m)]).tables;
+  const modele = {};
+  Object.keys(dernier).forEach(id => {
+    const champs = STICKY_EXTRA_FIELDS[id] || [];
+    modele[id] = dernier[id].map(rd => {
+      const e = { desc: rd.desc, since: depuis, until: null };
+      champs.forEach(c => { e[c] = rd[c]; });
+      return e;
+    });
+  });
+  modele['tbl-depenses-semaine'] = [];
+  modele['tbl-economies-semaine'] = [];
+  sortie[DESC_TEMPLATE_KEY] = JSON.stringify(modele);
+
+  // le calendrier de l'année en cours : ce qui est passé est coché « payé »
+  const an = aujourdhui.getFullYear(), moisActuel = aujourdhui.getMonth() + 1;
+  const plus2 = moisActuel + 2 > 12 ? { a: an + 1, m: moisActuel - 10 } : { a: an, m: moisActuel + 2 };
+  const moins1 = moisActuel - 1 < 1 ? { a: an - 1, m: 12 } : { a: an, m: moisActuel - 1 };
+  const passe = (a, mo) => a < an || (a === an && mo < moisActuel);
+  sortie[CALENDRIER_KEY] = JSON.stringify({
+    ponctuels: [
+      { id: 'demo-p1', annee: plus2.a, mois: plus2.m, jour: '8', desc: 'Contrôle technique', somme: '85', paye: false },
+      { id: 'demo-p2', annee: moins1.a, mois: moins1.m, jour: '20', desc: 'Lunettes', somme: '150', paye: true },
+      { id: 'demo-p3', annee: an, mois: 7, jour: '', desc: "Vacances d'été", somme: '900', paye: passe(an, 7) }
+    ],
+    recurrents: [
+      { id: 'demo-r1', mois: 6, jour: '14', desc: 'Anniversaire de Lucie', somme: '60', depuis: an - 1, jusqua: null, sauf: [], payeAnnees: passe(an, 6) ? [an] : [] },
+      { id: 'demo-r2', mois: 9, jour: '25', desc: 'Impôt sur le revenu (solde)', somme: '220', depuis: an - 1, jusqua: null, sauf: [], payeAnnees: passe(an, 9) ? [an] : [] },
+      { id: 'demo-r3', mois: 12, jour: '24', desc: 'Noël', somme: '300', depuis: an - 1, jusqua: null, sauf: [], payeAnnees: [] }
+    ]
+  });
+  return sortie;
+}
 
 /* ---------- helpers ---------- */
 function num(v){ const n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : 0; }
@@ -5151,6 +5294,20 @@ function showUpdateBanner(){
 <script>
 (function(){
 "use strict";
+
+/* Mode démo (version 33) : aucune connexion, aucun envoi. On montre l'app (le carnet fictif est déjà
+   chargé par le script de l'app) et la barre du haut le dit clairement. */
+if (window.__modeDemo){
+  document.body.classList.add('mode-demo');
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  document.getElementById('loggedInAs').textContent = "👀 Mode démo : carnet fictif, rien n'est enregistré";
+  document.getElementById('importOldBtn').style.display = 'none';
+  const quitter = document.getElementById('logoutBtn');
+  quitter.textContent = 'Quitter la démo';
+  quitter.addEventListener('click', () => { location.href = location.pathname; });
+  return;
+}
 
 const SUPABASE_URL = "https://bguglfxfjzsgaojcfdcl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_jIyYksWZdWcDFUZCVlAl7w_ldfEs89N";
