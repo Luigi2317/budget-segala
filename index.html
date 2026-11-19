@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Budget Ségala</title>
+<title>Mon Budget</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#0b3d59">
@@ -347,6 +347,16 @@ footer{
 }
 .modal-header h3{color:var(--navy); margin:0;}
 .modal-close{background:none; border:none; font-size:1.3em; color:var(--navy); cursor:pointer; line-height:1;}
+/* Nouveau mot de passe (version 34) */
+#mdpModal{z-index:650; background:linear-gradient(180deg,#dff1f5 0%, #f4ecd8 100%);}
+#mdpModal .modal-box{max-width:420px; font-family:Georgia,'Times New Roman',serif; color:#22303c;}
+#mdpModal label{display:block; font-weight:bold; color:var(--navy); margin:12px 0 4px; font-size:.95em;}
+#mdpModal input{width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--sea); border-radius:6px; font-family:inherit; font-size:1em;}
+.mdp-texte{color:var(--navy); line-height:1.45; margin:10px 0 4px;}
+#mdpMessage{min-height:1.2em; margin-top:10px; font-size:.92em;}
+#mdpMessage.error{color:#b23a2a;} #mdpMessage.ok{color:#2a7a4f;}
+.mdp-boutons{display:flex; gap:10px; align-items:center; margin-top:14px;}
+button.mdp-plus-tard{background:none; border:none; color:#1f6f8b; text-decoration:underline; cursor:pointer; font-family:inherit;}
 /* Mode démo (version 33) : la barre du haut change de couleur, pour qu'on ne confonde jamais avec un vrai carnet */
 body.mode-demo #logoutBar{background:#8a4b14;}
 /* Mode d'emploi (2026-11-18) : s'ouvre aussi depuis l'écran de connexion, d'où sa place hors de l'app */
@@ -449,7 +459,7 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
 
 <div id="authGate">
   <div class="card">
-    <h1>⚓ Budget Ségala</h1>
+    <h1>⚓ Mon Budget</h1>
     <div class="subtitle">Espace client</div>
     <label for="authEmail">Email</label>
     <input type="email" id="authEmail" autocomplete="email" placeholder="toi@exemple.fr">
@@ -459,9 +469,30 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
       <button type="button" id="authLoginBtn">Se connecter</button>
       <button type="button" id="authSignupBtn" class="secondary">S'inscrire</button>
     </div>
+    <button type="button" class="aide-lien" id="mdpOublieBtn">Mot de passe oublié ?</button>
     <div id="authMessage"></div>
     <button type="button" class="aide-lien" data-aide>📖 Mode d'emploi</button>
     <a class="aide-lien" href="?demo">👀 Voir la démo (carnet fictif, sans compte)</a>
+  </div>
+</div>
+
+<!-- Nouveau mot de passe (version 34) : une page plein écran, ouverte au retour du lien « mot de passe oublié »
+     reçu par email, à la place de l'écran de connexion et de l'app. -->
+<div class="modal-overlay" id="mdpModal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mdpTitre">
+    <div class="modal-header">
+      <h3 id="mdpTitre">🔑 Choisis ton nouveau mot de passe</h3>
+    </div>
+    <p class="mdp-texte">Tu es arrivé ici par le lien reçu par email. Choisis un nouveau mot de passe (au moins 6 caractères), puis tu te connecteras avec.</p>
+    <label for="mdpNouveau">Nouveau mot de passe</label>
+    <input type="password" id="mdpNouveau" autocomplete="new-password">
+    <label for="mdpConfirme">Confirme le mot de passe</label>
+    <input type="password" id="mdpConfirme" autocomplete="new-password">
+    <div id="mdpMessage"></div>
+    <div class="mdp-boutons">
+      <button type="button" id="mdpEnregistrer" class="add-row-btn">Enregistrer</button>
+      <button type="button" id="mdpPlusTard" class="mdp-plus-tard">Annuler</button>
+    </div>
   </div>
 </div>
 
@@ -470,12 +501,12 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
 <div class="modal-overlay" id="aideModal" hidden>
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="aideTitre">
     <div class="modal-header">
-      <h3 id="aideTitre">📖 Mode d'emploi — Budget Ségala</h3>
+      <h3 id="aideTitre">📖 Mode d'emploi — Mon Budget</h3>
       <button type="button" class="modal-close" id="aideFermer" title="Fermer">✕</button>
     </div>
 
     <h4>Le principe</h4>
-    <p>Budget Ségala est un carnet de budget, reproduit d'après un carnet tenu à la main. Il fonctionne comme un <strong>classeur, avec une page par mois</strong> : les flèches en haut de l'écran permettent de passer d'un mois à l'autre. Chaque mois garde ses propres chiffres.</p>
+    <p>Mon Budget est un carnet de budget, reproduit d'après un carnet tenu à la main. Il fonctionne comme un <strong>classeur, avec une page par mois</strong> : les flèches en haut de l'écran permettent de passer d'un mois à l'autre. Chaque mois garde ses propres chiffres.</p>
     <p>Au début du mois, on <strong>répartit son salaire</strong> : on paie ses charges, on se donne un budget par enveloppe (courses, essence, loisirs…), et le reste part en épargne. Pendant le mois, on note ses dépenses dans les enveloppes. À la fin du mois, ce qui reste dans les enveloppes, ce sont les <strong>économies</strong>.</p>
 
     <h4>Les pages</h4>
@@ -517,7 +548,7 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
 
     <h4>Protection des données (RGPD)</h4>
     <ul>
-      <li><strong>L'objectif de Budget Ségala est de respecter le RGPD</strong>, le règlement européen sur la protection des données personnelles.</li>
+      <li><strong>L'objectif de Mon Budget est de respecter le RGPD</strong>, le règlement européen sur la protection des données personnelles.</li>
       <li>C'est dans cet objectif que tes données sont hébergées sur des serveurs situés à <strong>Londres (Royaume-Uni)</strong>. Le Royaume-Uni n'est plus dans l'Union européenne, mais la Commission européenne y reconnaît une protection des données équivalente à celle du RGPD (« décision d'adéquation », renouvelée jusqu'en décembre 2031). Tes données peuvent donc y être hébergées dans le respect du RGPD.</li>
       <li><strong>On ne collecte que le nécessaire</strong> : ton email (pour te connecter) et ton carnet. Aucune publicité, aucun traceur, aucune revente de données.</li>
       <li><strong>Tes droits</strong> : tu peux demander à consulter, corriger ou supprimer tes données et ton compte. Pour l'instant, adresse ta demande à la personne qui t'a donné accès à l'application.</li>
@@ -571,7 +602,7 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
     </svg>
   </div>
   <div class="hero-inner">
-    <h1>⚓ Budget Ségala ⚓</h1>
+    <h1>⚓ Mon Budget ⚓</h1>
     <div class="subtitle">Cap sur les finances — inspiré des embruns de Bretagne</div>
     <div class="month-nav">
       <button type="button" id="firstMonthBtn" title="Revenir au tout premier mois">⏮ Premier mois</button>
@@ -1069,7 +1100,7 @@ button.aide-lien, a.aide-lien{display:block; margin:14px auto 0; background:none
   </div>
 </div>
 
-<footer>⚓ Budget Ségala — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.75em;"></span></footer>
+<footer>⚓ Mon Budget — vent arrière pour vos finances ⚓<br><span id="buildVersionLabel" style="font-size:.75em;"></span></footer>
 </div><!-- /#appContent -->
 
 <script>
@@ -1509,7 +1540,7 @@ window.__modeDemo = MODE_DEMO;
 const localStorage = MODE_DEMO ? creerStockageDemo() : window.localStorage;
 /* Bump this on every real deployment. Shown in the footer + on the post-auto-update banner,
    so anyone can visually confirm which version they're on without opening devtools. */
-const BUILD_VERSION = "2026-11-19 (33)";
+const BUILD_VERSION = "2026-11-19 (34)";
 const OLD_STORAGE_KEY = "budgetSegalaData_v1"; // pre-month-tracking single save, migrated below
 
 /* Une mémoire qui se comporte comme localStorage (mêmes fonctions), remplie au premier usage :
@@ -3415,7 +3446,7 @@ function generatePdf(){
   doc.setFont('helvetica','bold');
   doc.setFontSize(20);
   doc.setTextColor(11,61,89);
-  doc.text('Budget Ségala', marginX, y);
+  doc.text('Mon Budget', marginX, y);
   y += 18;
   doc.setFont('helvetica','normal');
   doc.setFontSize(11);
@@ -3491,13 +3522,13 @@ async function exportHtmlCopy(){
   clone.querySelector('body').appendChild(seedScript);
 
   const html = '<!DOCTYPE html>\n' + clone.outerHTML;
-  const filename = `Budget Ségala - ${formatMonthLabel(currentMonth)} - ${todayStamp()}.html`;
+  const filename = `Mon Budget - ${formatMonthLabel(currentMonth)} - ${todayStamp()}.html`;
 
   if (window.showSaveFilePicker){
     try {
       const handle = await window.showSaveFilePicker({
         suggestedName: filename,
-        types: [{ description:'Budget Ségala', accept:{'text/html':['.html']} }]
+        types: [{ description:'Mon Budget', accept:{'text/html':['.html']} }]
       });
       const writable = await handle.createWritable();
       await writable.write(html);
@@ -3527,7 +3558,7 @@ function importHtmlBackup(){
     reader.onload = ()=>{
       const text = String(reader.result);
       const match = text.match(/<script[^>]*id=["']__seed_data__["'][^>]*>([\s\S]*?)<\/script>/);
-      if (!match){ alert('Ce fichier ne contient pas de sauvegarde Budget Ségala reconnaissable.'); return; }
+      if (!match){ alert('Ce fichier ne contient pas de sauvegarde Mon Budget reconnaissable.'); return; }
       let payload;
       try { payload = JSON.parse(match[1]); } catch(e){ alert('Cette sauvegarde est illisible.'); return; }
       if (!payload || !payload.months){ alert('Cette sauvegarde est illisible.'); return; }
@@ -5309,6 +5340,23 @@ if (window.__modeDemo){
   return;
 }
 
+/* ---------- Mot de passe oublié (version 34) ----------
+   Le lien reçu par email ramène ici avec « type=recovery » dans l'adresse. Supabase connecte alors la
+   personne puis efface l'adresse ; et juste après la connexion, l'app recharge la page pour récupérer
+   les données du compte. On note donc l'arrivée dans sessionStorage (qui survit au rechargement, et
+   disparaît à la fermeture de l'onglet) : la fenêtre « nouveau mot de passe » s'ouvrira après. */
+const CLE_NOUVEAU_MDP = 'budgetSegala_nouveauMdp';
+function estLienDeRecuperation(adresseHash){
+  return /(^|[#&])type=recovery(&|$)/.test(String(adresseHash || ''));
+}
+/* Le contrôle des deux cases : renvoie le problème en clair, ou '' si tout va bien. */
+function verifierNouveauMotDePasse(motDePasse, confirmation){
+  if (!motDePasse || motDePasse.length < 6) return 'Le mot de passe doit faire au moins 6 caractères.';
+  if (motDePasse !== confirmation) return 'Les deux mots de passe ne sont pas identiques.';
+  return '';
+}
+try { if (estLienDeRecuperation(location.hash)) sessionStorage.setItem(CLE_NOUVEAU_MDP, '1'); } catch(e){}
+
 const SUPABASE_URL = "https://bguglfxfjzsgaojcfdcl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_jIyYksWZdWcDFUZCVlAl7w_ldfEs89N";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -5499,6 +5547,18 @@ async function handleAuthed(user){
 }
 
 async function bootstrapSession(user){
+  /* Arrivée par le lien « mot de passe oublié » : la personne est connectée par le lien, mais on ne lui
+     montre que la page « nouveau mot de passe ». Pas de récupération des données ni de rechargement :
+     après l'enregistrement, elle sera déconnectée et se reconnectera avec son nouveau mot de passe. */
+  let arriveeParLeLien = false;
+  try { arriveeParLeLien = sessionStorage.getItem(CLE_NOUVEAU_MDP) === '1'; } catch(e){}
+  if (arriveeParLeLien){
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('authEmail').value = user.email || '';
+    ouvrirNouveauMotDePasse();
+    return;
+  }
   currentUser = user;
   window.__syncToCloud = scheduleSyncToCloud;
   window.__markMonthDirty = (mk) => { if (mk) dirtyMonths.add(mk); };
@@ -5577,6 +5637,57 @@ document.getElementById('authLoginBtn').addEventListener('click', async ()=>{
   showMessage('', false);
 });
 
+function ouvrirNouveauMotDePasse(){
+  document.getElementById('mdpMessage').textContent = '';
+  document.getElementById('mdpModal').hidden = false;
+  document.getElementById('mdpNouveau').focus();
+}
+function fermerNouveauMotDePasse(){
+  document.getElementById('mdpModal').hidden = true;
+  try { sessionStorage.removeItem(CLE_NOUVEAU_MDP); } catch(e){}
+}
+
+/* « Mot de passe oublié ? » : Supabase envoie un lien vers CETTE adresse (elle doit être autorisée
+   dans Authentication → URL Configuration). Le message est le même qu'un compte existe ou non :
+   on ne révèle pas quelles adresses ont un compte. */
+document.getElementById('mdpOublieBtn').addEventListener('click', async ()=>{
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email){ showMessage("Tape d'abord ton email dans la case Email, puis clique sur « Mot de passe oublié ? ».", true); return; }
+  showMessage('Envoi du lien en cours...', false);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error && /rate|limit|seconds/i.test(error.message)){
+    showMessage('Trop de demandes en peu de temps. Réessaie dans quelques minutes.', true);
+    return;
+  }
+  if (error){ showMessage("L'envoi n'a pas pu se faire : " + error.message, true); return; }
+  showMessage("Si un compte existe pour cet email, un lien vient de t'être envoyé. Ouvre-le pour choisir un nouveau mot de passe.", false);
+});
+
+document.getElementById('mdpEnregistrer').addEventListener('click', async ()=>{
+  const motDePasse = document.getElementById('mdpNouveau').value;
+  const probleme = verifierNouveauMotDePasse(motDePasse, document.getElementById('mdpConfirme').value);
+  const msg = document.getElementById('mdpMessage');
+  if (probleme){ msg.textContent = probleme; msg.className = 'error'; return; }
+  msg.textContent = 'Enregistrement...'; msg.className = 'ok';
+  const { error } = await supabase.auth.updateUser({ password: motDePasse });
+  if (error){ msg.textContent = "Le mot de passe n'a pas pu être changé : " + error.message; msg.className = 'error'; return; }
+  document.getElementById('mdpNouveau').value = '';
+  document.getElementById('mdpConfirme').value = '';
+  await retourALaConnexion('✓ Mot de passe changé. Connecte-toi avec ton nouveau mot de passe.');
+});
+document.getElementById('mdpPlusTard').addEventListener('click', () => retourALaConnexion(''));
+
+/* Ferme la page, déconnecte la session ouverte par le lien, et affiche l'écran de connexion (email déjà
+   rempli) avec un message. signOut déclenche aussi handleLoggedOut : l'écran de connexion s'affiche. */
+async function retourALaConnexion(message){
+  fermerNouveauMotDePasse();
+  try { await supabase.auth.signOut(); } catch(e){}
+  handleLoggedOut();
+  showMessage(message, false);
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authPassword').focus();
+}
+
 document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   if (currentUser) sessionStorage.removeItem('pulledFor_' + currentUser.id);
   await supabase.auth.signOut();
@@ -5640,6 +5751,7 @@ document.getElementById('importOldBtn').addEventListener('click', ()=>{
 });
 
 supabase.auth.onAuthStateChange((event, session)=>{
+  if (event === 'PASSWORD_RECOVERY'){ try { sessionStorage.setItem(CLE_NOUVEAU_MDP, '1'); } catch(e){} }
   if (session && session.user) handleAuthed(session.user); else handleLoggedOut();
 });
 supabase.auth.getSession().then(({ data })=>{
